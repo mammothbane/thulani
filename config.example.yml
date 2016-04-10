@@ -1,0 +1,11 @@
+trigger: sample
+
+queue_size: 5
+admin: 12345678901234567
+op_role: sample-controller
+
+server: sample
+voice_channel: General
+
+username: username@example.com
+password: testpass123
