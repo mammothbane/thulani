@@ -2,8 +2,8 @@ import discord
 import logging
 import re
 import yaml
-from signal import signal, SIGINT
-from asyncio import Queue, QueueEmpty, sleep
+from contextlib import suppress
+from asyncio import Queue, QueueEmpty, sleep, ensure_future, get_event_loop
 from urllib.parse import urlsplit
 from functools import partial
 
@@ -29,11 +29,12 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    logger.debug('received message \'{}\' from {}#{}, ({})'.format(message.content,
-                                                                   message.server,
-                                                                   message.channel,
-                                                                   'private' if message.channel.is_private else 'public'))
-    
+    logger.debug('received message \'{}\' from {}#{}:{}, ({})'.format(message.content,
+                                                                      message.server,
+                                                                      message.channel,
+                                                                      message.author.id,
+                                                                      'private' if message.channel.is_private else 'public'))
+
     if message.channel.is_private:
         logger.debug('ignoring private message.')
         return
@@ -66,23 +67,23 @@ async def on_message(message):
     if command in cmd_map:
         if author_id == config['admin'] or config['op_role'] in [role.name for role in message.author.roles]:
             logger.info('running command \'{}\''.format(command))
-            cmd_map[command]()
+            ensure_future(cmd_map[command]())
             return
 
         logger.info('unauthorized command \'{}\' from member \'{}\' ({})'.format(command, message.author.name, message.author.id))
-        client.send_message(message.channel, 'fuck you. you\'re not allowed to do that.', tts=message.tts)
+        ensure_future(client.send_message(message.channel, 'fuck you. you\'re not allowed to do that.', tts=message.tts))
         return
 
     url = urlsplit(command, scheme='https')
     if not (url.netloc and (url.path or (url.path is '/watch' and not url.query))):
         logger.info('syntax error: invalid url \'{}\''.format(command))
-        client.send_message(message.channel, 'format your commands right. fuck you.', tts=message.tts)
+        ensure_future(client.send_message(message.channel, 'format your commands right. fuck you.', tts=message.tts))
         return
 
     url = url.geturl()
     logger.debug('playing video from url \'{}\''.format(url))
 
-    enqueue_video(url, message)
+    ensure_future(enqueue_video(url, message))
 
 
 async def pause():
@@ -124,14 +125,14 @@ async def enqueue_video(url, message):
     await connect_voice()
 
     if not client.is_voice_connected():
-        client.send_message(message.channel, 'go fuck yourself. voice isn\'t working.', tts=True)
+        ensure_future(client.send_message(message.channel, 'go fuck yourself. voice isn\'t working.', tts=True))
         return
 
     if queue.full():
-        client.send_message(message.channel, 'fuck you. wait for the other videos.', tts=True)
+        ensure_future(client.send_message(message.channel, 'fuck you. wait for the other videos.', tts=True))
         return
 
-    queue.put((url, message))
+    ensure_future(queue.put((url, message)))
 
 
 async def connect_voice():
@@ -154,7 +155,7 @@ async def list_queued(channel):
         if slots is not 0:
             s += '{} slots remaining in the queue.'.format(slots - count)
 
-        client.send_message(channel, s.strip())
+        ensure_future(client.send_message(channel, s.strip()))
 
 
     if current_player and not current_player.is_done():
@@ -197,11 +198,23 @@ async def list_queued(channel):
     list_resp(s, count)
 
 
+die = False
+
 async def run_video():
     vid_logger = logger.getChild('video_scheduler')
     vid_logger.debug('entering run_video')
 
-    (url, _) = await queue.get()
+    while True:
+        if die:
+            return
+        
+        try:
+            (url, _) = queue.get_nowait()
+        except QueueEmpty:
+            await sleep(0.5)
+        else:
+            break
+
     await connect_voice()
 
     if not client.is_voice_connected():
@@ -223,15 +236,29 @@ async def run_video():
             vid_logger.debug('sleeping')
             has_slept = True
 
-        await sleep(2)
+        await sleep(0.5)
     
     if has_slept:
         vid_logger.debug('awoken')
 
-        run_video()
+        ensure_future(run_video())
 
-## this is a harsh exit, but I don't want to deal with closing out the task waiting in run_video or C-c C-c
-signal(SIGINT, lambda _, __: exit(0))
 
-run_video()
-client.run(config['username'], config['password'])
+ensure_future(run_video())
+
+loop = get_event_loop()
+try:
+    loop.run_until_complete(client.start(config['username'], config['password']))
+except KeyboardInterrupt:
+    import time
+    die = True
+
+    logger.info('shutting down')
+    time.sleep(1.2)
+
+    with suppress(discord.errors.ClientException):
+        loop.run_until_complete(client.logout())
+        loop.stop()
+finally:
+    loop.close()
+
