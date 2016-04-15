@@ -2,6 +2,7 @@ import discord
 import logging
 import re
 import yaml
+from signal import signal, SIGINT
 from asyncio import Queue, QueueEmpty, sleep
 from urllib.parse import urlsplit
 from functools import partial
@@ -81,7 +82,7 @@ async def on_message(message):
     url = url.geturl()
     logger.debug('playing video from url \'{}\''.format(url))
 
-    enqueue_video((url, message))
+    enqueue_video(url, message)
 
 
 async def pause():
@@ -119,18 +120,18 @@ async def stop_client():
     await stop_player()
 
 
-async def enqueue_video(pair):
+async def enqueue_video(url, message):
     await connect_voice()
 
     if not client.is_voice_connected():
-        client.send_message(pair[1].channel, 'go fuck yourself. voice isn\'t working.', tts=True)
+        client.send_message(message.channel, 'go fuck yourself. voice isn\'t working.', tts=True)
         return
 
     if queue.full():
-        client.send_message(pair[1].channel, 'fuck you. wait for the other videos.', tts=True)
+        client.send_message(message.channel, 'fuck you. wait for the other videos.', tts=True)
         return
 
-    queue.put(pair)
+    queue.put((url, message))
 
 
 async def connect_voice():
@@ -229,6 +230,8 @@ async def run_video():
 
         run_video()
 
+## this is a harsh exit, but I don't want to deal with closing out the task waiting in run_video or C-c C-c
+signal(SIGINT, lambda _, __: exit(0))
 
 run_video()
 client.run(config['username'], config['password'])
