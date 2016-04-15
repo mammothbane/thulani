@@ -2,6 +2,7 @@ import discord
 import logging
 import re
 import yaml
+from datetime import datetime, timedelta
 from contextlib import suppress
 from asyncio import Queue, QueueEmpty, sleep, ensure_future, get_event_loop
 from urllib.parse import urlsplit
@@ -60,8 +61,8 @@ async def on_message(message):
         'sudoku': stop_client,
         'pause': pause,
         'resume': resume,
-        'list': list_queued,
-        'queue': list_queued,
+        'list': partial(list_queued, message.channel),
+        'queue': partial(list_queued, message.channel),
     }
 
     if command in cmd_map:
@@ -87,20 +88,26 @@ async def on_message(message):
 
 
 async def pause():
+    global current_player
     if not current_player:
         return
 
     current_player.pause()
+    current_player.acc_time += (datetime.now() - current_player.start_playback_time)
+    current_player.start_playback_time = None
 
 
 async def resume():
+    global current_player
     if not current_player:
         return
 
     current_player.resume()
+    current_player.start_playback_time = datetime.now()
 
 
 async def stop_player():
+    global current_player
     if not current_player:
         return
 
@@ -109,6 +116,7 @@ async def stop_player():
 
 
 async def stop_client():
+    global current_player
     if not current_player:
         return
 
@@ -144,6 +152,7 @@ async def connect_voice():
 
 
 async def list_queued(channel):
+    global current_player
     s = ''
     count = 0
 
@@ -157,9 +166,28 @@ async def list_queued(channel):
 
         ensure_future(client.send_message(channel, s.strip()))
 
-
+    def format_secs(secs):
+        durs = ''
+        if not secs:
+            return durs
+        
+        if secs > 60:
+            durs += '{}m'.format(int(secs / 60))
+            durs += '{:02d}s'.format(secs % 60)
+        else:
+            durs += '{}s'.format(secs % 60)
+        return durs
+        
     if current_player and not current_player.is_done():
-        s += '**{}**: {}\n\n'.format('playing' if current_player.is_playing() else 'paused', current_player.title)
+        running_tot = current_player.acc_time
+        if current_player.start_playback_time:
+            running_tot += (datetime.now() - current_player.start_playback_time)
+        
+        running = format_secs(int(running_tot.total_seconds()))
+        durs = format_secs(current_player.duration)
+        
+        s += '**{}**: {}{}\n\n'.format('playing' if current_player.is_playing() else 'paused', current_player.title,
+                                       '     (*{}*/*{}*)'.format(running, durs) if durs else '')
     
     pairs = []
     while True:
@@ -201,6 +229,7 @@ async def list_queued(channel):
 die = False
 
 async def run_video():
+    global current_player
     vid_logger = logger.getChild('video_scheduler')
     vid_logger.debug('entering run_video')
 
@@ -225,6 +254,8 @@ async def run_video():
     vid_logger.debug('starting playback')
     current_player = await client.voice.create_ytdl_player(url)
     current_player.start()
+    current_player.start_playback_time = datetime.now()
+    current_player.acc_time = timedelta()
     vid_logger.debug('playback started')
 
     has_slept = False
