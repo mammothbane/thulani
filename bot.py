@@ -2,7 +2,7 @@ import discord
 import logging
 import re
 import yaml
-from asyncio import coroutine, Queue, ensure_future as async, QueueEmpty, sleep
+from asyncio import Queue, QueueEmpty, sleep
 from urllib.parse import urlsplit
 from functools import partial
 
@@ -22,14 +22,12 @@ reg = re.compile(r'^(?:!|\/){} (.*)$'.format(config['trigger']))
 
 
 @client.event
-@coroutine
-def on_ready():
+async def on_ready():
     logger.info('Logged in as {} ({})'.format(client.user.name, client.user.id))
 
 
 @client.event
-@coroutine
-def on_message(message):
+async def on_message(message):
     logger.debug('received message \'{}\' from {}#{}, ({})'.format(message.content,
                                                                    message.server,
                                                                    message.channel,
@@ -67,43 +65,40 @@ def on_message(message):
     if command in cmd_map:
         if author_id == config['admin'] or config['op_role'] in [role.name for role in message.author.roles]:
             logger.info('running command \'{}\''.format(command))
-            async(cmd_map[command]())
+            cmd_map[command]()
             return
 
         logger.info('unauthorized command \'{}\' from member \'{}\' ({})'.format(command, message.author.name, message.author.id))
-        async(client.send_message(message.channel, 'fuck you. you\'re not allowed to do that.', tts=message.tts))
+        client.send_message(message.channel, 'fuck you. you\'re not allowed to do that.', tts=message.tts)
         return
 
     url = urlsplit(command, scheme='https')
     if not (url.netloc and (url.path or (url.path is '/watch' and not url.query))):
         logger.info('syntax error: invalid url \'{}\''.format(command))
-        async(client.send_message(message.channel, 'format your commands right. fuck you.', tts=message.tts))
+        client.send_message(message.channel, 'format your commands right. fuck you.', tts=message.tts)
         return
 
     url = url.geturl()
     logger.debug('playing video from url \'{}\''.format(url))
 
-    async(enqueue_video((url, message)))
+    enqueue_video((url, message))
 
 
-@coroutine
-def pause():
+async def pause():
     if not current_player:
         return
 
     current_player.pause()
 
 
-@coroutine
-def resume():
+async def resume():
     if not current_player:
         return
 
     current_player.resume()
 
 
-@coroutine
-def stop_player():
+async def stop_player():
     if not current_player:
         return
 
@@ -111,8 +106,7 @@ def stop_player():
     current_player = None
 
 
-@coroutine
-def stop_client():
+async def stop_client():
     if not current_player:
         return
 
@@ -122,37 +116,32 @@ def stop_client():
         except QueueEmpty:
             break
 
-    yield from async(stop_player())
+    await stop_player()
 
 
-@coroutine
-def enqueue_video(pair):
-    global config
-    
-    yield from async(connect_voice())
+async def enqueue_video(pair):
+    await connect_voice()
 
     if not client.is_voice_connected():
-        async(client.send_message(pair[1].channel, 'go fuck yourself. voice isn\'t working.', tts=True))
+        client.send_message(pair[1].channel, 'go fuck yourself. voice isn\'t working.', tts=True)
         return
 
     if queue.full():
-        async(client.send_message(pair[1].channel, 'fuck you. wait for the other videos.', tts=True))
+        client.send_message(pair[1].channel, 'fuck you. wait for the other videos.', tts=True)
         return
 
-    async(queue.put(pair))
+    queue.put(pair)
 
 
-@coroutine
-def connect_voice():
+async def connect_voice():
     if not client.is_voice_connected():
         server = discord.utils.find(lambda x: x.name == config['server'], client.servers)
         voice_chan = discord.utils.find(lambda x: x.name == config['voice_channel'] and x.type is discord.ChannelType.voice, 
                                         server.channels)
-        yield from client.join_voice_channel(voice_chan)
+        await client.join_voice_channel(voice_chan)
 
 
-@coroutine
-def list_queued(channel):
+async def list_queued(channel):
     s = ''
     count = 0
 
@@ -164,7 +153,7 @@ def list_queued(channel):
         if slots is not 0:
             s += '{} slots remaining in the queue.'.format(slots - count)
 
-        async(client.send_message(channel, s.strip()))
+        client.send_message(channel, s.strip())
 
 
     if current_player and not current_player.is_done():
@@ -182,19 +171,19 @@ def list_queued(channel):
         list_resp(s, count)
         return
 
-    yield from async(connect_voice())
+    await connect_voice()
 
     if not client.is_voice_connected():
-        async(client.send_message(channel, 'go fuck yourself. couldn\'t check stored videos', tts=True))
+        client.send_message(channel, 'go fuck yourself. couldn\'t check stored videos', tts=True)
         logger.error('unable to connect to voice!')
         for pair in pairs:
-            yield from queue.put(pair)
+            await queue.put(pair)
         return
 
     for (url, msg) in pairs:
         if len(msg.embeds) == 0:
             logger.debug('got non-embedded link. creating player to find title.')
-            player = yield from client.voice.create_ytdl_player(url)
+            player = await client.voice.create_ytdl_player(url)
             name = player.title
         else:
             name = msg.embeds[0].get('title', None)
@@ -202,18 +191,17 @@ def list_queued(channel):
         s += '{}\n'.format(name if name and name != '' else '(Unknown)')
         count += 1
 
-        yield from queue.put((url, msg))
+        await queue.put((url, msg))
 
     list_resp(s, count)
 
 
-@coroutine
-def run_video():
+async def run_video():
     vid_logger = logger.getChild('video_scheduler')
     vid_logger.debug('entering run_video')
 
-    (url, _) = yield from queue.get()
-    yield from connect_voice()
+    (url, _) = await queue.get()
+    await connect_voice()
 
     if not client.is_voice_connected():
         raise Exception('unable to connect to voice!')
@@ -221,7 +209,7 @@ def run_video():
         vid_logger.info('voice reconnected')
 
     vid_logger.debug('starting playback')
-    current_player = yield from client.voice.create_ytdl_player(url)
+    current_player = await client.voice.create_ytdl_player(url)
     current_player.start()
     vid_logger.debug('playback started')
 
@@ -234,13 +222,13 @@ def run_video():
             vid_logger.debug('sleeping')
             has_slept = True
 
-        yield from sleep(2)
+        await sleep(2)
     
     if has_slept:
         vid_logger.debug('awoken')
 
-    async(run_video())
+        run_video()
 
 
-async(run_video())
+run_video()
 client.run(config['username'], config['password'])

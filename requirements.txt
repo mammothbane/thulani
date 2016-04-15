@@ -1,0 +1,2 @@
+git+ssh://git@github.com/rapptz/discord.py@async
+pyyaml==3.11
