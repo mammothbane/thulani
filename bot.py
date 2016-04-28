@@ -61,6 +61,7 @@ async def on_message(message):
         'sudoku': stop_client,
         'pause': pause,
         'resume': resume,
+        'help': partial(print_help, message.channel),
         'list': partial(list_queued, message.channel),
         'queue': partial(list_queued, message.channel),
     }
@@ -127,6 +128,23 @@ async def stop_client():
             break
 
     await stop_player()
+
+
+async def print_help(channel):
+    help_msg = """wew lad. you should know these commands already.
+
+Usage: `!thulani [command]`
+
+commands:
+**help**:\t\t\t\tprint this help message
+**[url]**:\t\t\t   a url with media that thulani can play. queued up to play after everything that's already waiting.
+**list, queue**:\tlist items in the queue, as well as the currently-playing item.
+**pause**:\t\t\tpause sound.
+**resume**:\t\t resume sound.
+**die**:\t\t\t\t empty the queue and stop playing.
+**skip**:\t\t\t   skip the current item."""
+
+    ensure_future(client.send_message(channel, help_msg))
 
 
 async def enqueue_video(url, message):
@@ -244,7 +262,12 @@ async def run_video():
         else:
             break
 
-    await connect_voice()
+    try:
+        await connect_voice()
+    except Exception:
+        logger.exception('waiting to connect voice')
+        ensure_future(run_video())
+        return
 
     if not client.is_voice_connected():
         raise Exception('unable to connect to voice!')
@@ -272,12 +295,13 @@ async def run_video():
     if has_slept:
         vid_logger.debug('awoken')
 
-        ensure_future(run_video())
+    ensure_future(run_video())
 
 
 ensure_future(run_video())
 
 loop = get_event_loop()
+loop.set_debug(True)
 try:
     loop.run_until_complete(client.start(config['username'], config['password']))
 except KeyboardInterrupt:
