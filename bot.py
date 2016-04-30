@@ -302,18 +302,21 @@ ensure_future(run_video())
 
 loop = get_event_loop()
 loop.set_debug(True)
-try:
-    loop.run_until_complete(client.start(config['username'], config['password']))
-except KeyboardInterrupt:
-    import time
-    die = True
 
-    logger.info('shutting down')
-    time.sleep(1.2)
+while True:
+    try:
+        loop.run_until_complete(client.start(config['username'], config['password']))
+    except KeyboardInterrupt:
+        import time
+        die = True
 
-    with suppress(discord.errors.ClientException):
-        loop.run_until_complete(client.logout())
-        loop.stop()
-finally:
-    loop.close()
+        logger.info('shutting down')
+        time.sleep(1.2)
+
+        with suppress(discord.errors.ClientException):
+            loop.run_until_complete(client.logout())
+            loop.stop()
+            loop.close()
+    except Exception:
+        logger.exception()
 
