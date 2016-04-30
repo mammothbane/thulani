@@ -1,0 +1,5 @@
+.ensime
+.ensime_cache
+project
+target
+config.yml
