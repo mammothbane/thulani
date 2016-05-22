@@ -4,9 +4,10 @@ import re
 import yaml
 from datetime import datetime, timedelta
 from contextlib import suppress
-from asyncio import Queue, QueueEmpty, sleep, ensure_future, get_event_loop
+from asyncio import Queue, QueueEmpty, sleep, ensure_future, get_event_loop, gather
 from urllib.parse import urlsplit
 from functools import partial
+from youtube_dl.utils import DownloadError
 
 logging.basicConfig(level=logging.INFO)
 
@@ -21,6 +22,16 @@ queue = Queue(maxsize=config.get('queue_size', 0))
 current_player = None
 
 reg = re.compile(r'^(?:!|\/){} (.*)$'.format(config['trigger']))
+
+
+def srv(client):
+    sv = config['server']
+    if type(sv) is int:
+        return discord.utils.get(client.servers, id=sv)
+    elif type(sv) is str:
+        return discord.utils.get(client.servers, name=sv)
+    else:
+        raise TypeError('Unknown type {} for server'.format(type(sv)))
 
 
 @client.event
@@ -69,23 +80,32 @@ async def on_message(message):
     if command in cmd_map:
         if author_id == config['admin'] or config['op_role'] in [role.name for role in message.author.roles]:
             logger.info('running command \'{}\''.format(command))
-            ensure_future(cmd_map[command]())
+            handle_future(cmd_map[command]())
             return
 
         logger.info('unauthorized command \'{}\' from member \'{}\' ({})'.format(command, message.author.name, message.author.id))
-        ensure_future(client.send_message(message.channel, 'fuck you. you\'re not allowed to do that.', tts=message.tts))
+        handle_future(client.send_message(message.channel, 'fuck you. you\'re not allowed to do that.', tts=message.tts))
         return
 
     url = urlsplit(command, scheme='https')
     if not (url.netloc and (url.path or (url.path is '/watch' and not url.query))):
         logger.info('syntax error: invalid url \'{}\''.format(command))
-        ensure_future(client.send_message(message.channel, 'format your commands right. fuck you.', tts=message.tts))
+        handle_future(client.send_message(message.channel, 'format your commands right. fuck you.', tts=message.tts))
         return
 
     url = url.geturl()
+
+    if 'imgur' in command:
+        logger.info("got imgur link. ignoring.")
+        if message.author.name == 'boomshticky':
+            handle_future(client.send_message(message.channel, "fuck you conway", tts=True))
+        else:
+            handle_future(client.send_message(message.channel, "NO IMGUR"))
+        return
+
     logger.debug('playing video from url \'{}\''.format(url))
 
-    ensure_future(enqueue_video(url, message))
+    handle_future(enqueue_video(url, message))
 
 
 async def pause():
@@ -144,25 +164,25 @@ commands:
 **die**:\t\t\t\t empty the queue and stop playing.
 **skip**:\t\t\t   skip the current item."""
 
-    ensure_future(client.send_message(channel, help_msg))
+    handle_future(client.send_message(channel, help_msg))
 
 
 async def enqueue_video(url, message):
     await connect_voice()
 
-    if not client.is_voice_connected():
-        ensure_future(client.send_message(message.channel, 'go fuck yourself. voice isn\'t working.', tts=True))
+    if not client.is_voice_connected(srv(client)):
+        handle_future(client.send_message(message.channel, 'go fuck yourself. voice isn\'t working.', tts=True))
         return
 
     if queue.full():
-        ensure_future(client.send_message(message.channel, 'fuck you. wait for the other videos.', tts=True))
+        handle_future(client.send_message(message.channel, 'fuck you. wait for the other videos.', tts=True))
         return
 
-    ensure_future(queue.put((url, message)))
+    handle_future(queue.put((url, message)))
 
 
 async def connect_voice():
-    if not client.is_voice_connected():
+    if not client.is_voice_connected(srv(client)):
         server = discord.utils.find(lambda x: x.name == config['server'], client.servers)
         voice_chan = discord.utils.find(lambda x: x.name == config['voice_channel'] and x.type is discord.ChannelType.voice, 
                                         server.channels)
@@ -182,7 +202,7 @@ async def list_queued(channel):
         if slots is not 0:
             s += '{} slots remaining in the queue.'.format(slots - count)
 
-        ensure_future(client.send_message(channel, s.strip()))
+        handle_future(client.send_message(channel, s.strip()))
 
     def format_secs(secs):
         durs = ''
@@ -221,7 +241,7 @@ async def list_queued(channel):
 
     await connect_voice()
 
-    if not client.is_voice_connected():
+    if not client.is_voice_connected(srv(client)):
         client.send_message(channel, 'go fuck yourself. couldn\'t check stored videos', tts=True)
         logger.error('unable to connect to voice!')
         for pair in pairs:
@@ -231,7 +251,10 @@ async def list_queued(channel):
     for (url, msg) in pairs:
         if len(msg.embeds) == 0:
             logger.debug('got non-embedded link. creating player to find title.')
-            player = await client.voice.create_ytdl_player(url)
+            try:
+                player = await client.voice_client_in(srv(client)).create_ytdl_player(url)
+            except DownloadError:
+                logger.exception('unable to download info for {}'.format(url))
             name = player.title
         else:
             name = msg.embeds[0].get('title', None)
@@ -256,7 +279,7 @@ async def run_video():
             return
         
         try:
-            (url, _) = queue.get_nowait()
+            (url, msg) = queue.get_nowait()
         except QueueEmpty:
             await sleep(0.5)
         else:
@@ -266,16 +289,23 @@ async def run_video():
         await connect_voice()
     except Exception:
         logger.exception('waiting to connect voice')
-        ensure_future(run_video())
+        handle_future(run_video())
         return
 
-    if not client.is_voice_connected():
+    if not client.is_voice_connected(srv(client)):
         raise Exception('unable to connect to voice!')
     else:
         vid_logger.info('voice reconnected')
 
     vid_logger.debug('starting playback')
-    current_player = await client.voice.create_ytdl_player(url)
+    try:
+        current_player = await client.voice_client_in(srv(client)).create_ytdl_player(url)
+    except DownloadError:
+        logger.exception('unable to create player for {}'.format(url))
+        ensure_future(client.send_message(msg.channel, 'BAD LINK', tts=True))
+        handle_future(run_video())
+        return
+
     current_player.start()
     current_player.start_playback_time = datetime.now()
     current_player.acc_time = timedelta()
@@ -295,16 +325,25 @@ async def run_video():
     if has_slept:
         vid_logger.debug('awoken')
 
-    ensure_future(run_video())
+    handle_future(run_video())
 
+def handle_future(fut):
+    ensure_future(handle_impl(ensure_future(fut)))
 
-ensure_future(run_video())
+async def handle_impl(fut):
+    try:
+        await gather(fut)
+    except Exception as e:
+        logger.exception('awaiting {}'.format(fut))
+
+handle_future(run_video())
 
 loop = get_event_loop()
 loop.set_debug(True)
 
 while True:
     try:
+        logger.info('starting')
         loop.run_until_complete(client.start(config['username'], config['password']))
     except KeyboardInterrupt:
         import time
@@ -318,5 +357,5 @@ while True:
             loop.stop()
             loop.close()
     except Exception:
-        logger.exception()
+        logger.exception('main loop')
 
