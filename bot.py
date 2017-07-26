@@ -342,6 +342,10 @@ loop = get_event_loop()
 loop.set_debug(True)
 
 while True:
+    if loop.is_closed():
+        print('Event loop closed. Exiting.')
+        exit()
+    
     try:
         logger.info('starting')
         loop.run_until_complete(client.start(config['username'], config['password']))
@@ -358,4 +362,3 @@ while True:
             loop.close()
     except Exception:
         logger.exception('main loop')
-
