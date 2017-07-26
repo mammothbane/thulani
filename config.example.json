@@ -1,0 +1,9 @@
+{
+  "trigger": "bot",
+  "queue_size": 5,
+  "admin": 12345,
+  "op_role": "bot-op",
+  "server": "example server",
+  "voice_channel": "General",
+  "token": 12391823918
+}
