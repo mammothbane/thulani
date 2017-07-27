@@ -1,45 +1,27 @@
-package main
+package thulani
 
 import (
-	"encoding/json"
-	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-type config struct {
-	Trigger      string `json:"trigger"`
-	QueueSize    uint   `json:"queue_size"`
-	Admin        string `json:"admin"`
-	OpRole       string `json:"op_role"`
-	Server       string `json:"server"`
-	VoiceChannel string `json:"voice_channel"`
-	Token        string `json:"token"`
-}
-
-func (c *config) UnmarshalYAML(unmarshal func(interface{}) error) error {
-
-	return nil
-}
-
-func main() {
-	file, err := os.Open("config.json")
+func Run(conf *Config) {
+	dg, err := discordgo.New("Bot " + conf.Token)
 	handle(err)
 
-	var conf config
-	handle(json.NewDecoder(file).Decode(&conf))
+	dg.AddHandler(onReady)
+	dg.Open()
 
-	dg, err := discordgo.New()
-	handle(err)
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	<-sc
 
-	app := &discordgo.Application{}
-	app.Name = "Thulani"
-
+	dg.Close()
 }
 
-func handle(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
+func onReady(s *discordgo.Session, m *discordgo.Ready) {
+	log.Debugf("Logged in as %v (%v)", m.User.Username, m.User.ID)
 }
