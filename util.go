@@ -2,12 +2,9 @@ package thulani
 
 import (
 	"encoding/json"
-	"os"
-
 	"net/url"
-
+	"os"
 	"strconv"
-
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
@@ -49,7 +46,7 @@ func handle(err error) {
 }
 
 func LoadConfig(filename string) (*Config, error) {
-	file, err := os.Open("config.json")
+	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
@@ -58,9 +55,6 @@ func LoadConfig(filename string) (*Config, error) {
 	err = json.NewDecoder(file).Decode(&conf)
 	return &conf, err
 }
-
-var _oauthUrl string
-var oauthOnce sync.Once
 
 const requestedPerms = discordgo.PermissionEmbedLinks |
 	discordgo.PermissionReadMessages |
@@ -74,6 +68,9 @@ const requestedPerms = discordgo.PermissionEmbedLinks |
 	discordgo.PermissionChangeNickname |
 	discordgo.PermissionVoiceUseVAD |
 	discordgo.PermissionAttachFiles
+
+var _oauthUrl string
+var oauthOnce sync.Once
 
 func oauthUrl() string {
 	oauthOnce.Do(func() {

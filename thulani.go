@@ -36,11 +36,6 @@ func Run(conf *Config) {
 func onReady(s *discordgo.Session, m *discordgo.Ready) {
 	log.Infof("Logged in as %v (%v)", m.User.Username, m.User.ID)
 
-	_, err := s.UserUpdate("", "", "thulani", "https://cdn.discordapp.com/attachments/90548758458167296/338518035256311809/todd.png", "")
-	if err != nil {
-		log.Errorf("error updating user: %v", err)
-	}
-
 	s.UpdateStatus(0, "literally nothing")
 
 	joined := false
@@ -60,21 +55,29 @@ func onGuildCreate(s *discordgo.Session, m *discordgo.GuildCreate) {
 	member, err := s.GuildMember(m.Guild.ID, s.State.User.ID)
 	if err != nil {
 		log.Warningf("joined guild %v but was unable to get member id: %q", m.Name, err)
+		log.Notice("please reconnect to guild: %v", oauthUrl())
+		s.GuildLeave(m.Guild.ID)
+		return
 	}
+	log.Infof("joined guild %v", m.Name)
+
+	perms := 0
 
 	for _, role := range m.Roles {
 		for _, mRole := range member.Roles {
 			if role.ID == mRole {
-				log.Infof("joined guild %v with role: %v (%v)", m.Name, role.Name, role.ID)
+				perms |= role.Permissions
 
-				if role.Permissions&requestedPerms != requestedPerms {
-					log.Errorf("server didn't grant us the desired permissions.")
-					s.GuildLeave(m.Guild.ID)
-					log.Warningf("Don't disable any permissions or thulani will be a little sponge man! Click here to die: %v", oauthUrl())
-					return
-				}
+				log.Infof("discovered role: %v (%v)", role.Name, role.ID)
 			}
 		}
+	}
+
+	if perms&requestedPerms != requestedPerms {
+		log.Errorf("server didn't grant us the desired permissions.")
+		s.GuildLeave(m.Guild.ID)
+		log.Warningf("Don't disable any permissions or thulani will be a little sponge man! Click here to die: %v", oauthUrl())
+		return
 	}
 
 	err = s.GuildMemberNickname(m.Guild.ID, "@me", "newlani")
@@ -115,20 +118,28 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	_ = func() bool {
-		for _, v := range ctx.Member.Roles {
-			if v == config.OpRole {
-				return true
-			}
-		}
-		log.Infof("User %v not authorized.", m.Author.Username)
-
-		ctx.sendMessage("fuck you. you're not allowed to do that.", m.Tts)
-		return false
-	}
-
 	fn, ok := cmdMap[strings.ToLower(ctx.Command)]
 	if ok {
+		authorized := false
+
+		for _, role := range ctx.Guild.Roles {
+			for _, v := range ctx.Member.Roles {
+				if v != role.Name {
+					continue
+				}
+
+				if role.Name == config.OpRole {
+					authorized = true
+				}
+			}
+		}
+
+		if !authorized {
+			log.Infof("User %v not authorized.", m.Author.Username)
+			ctx.sendMessage("fuck you. you're not allowed to do that.", m.Tts)
+			return
+		}
+
 		fn(ctx)
 		return
 	}
@@ -156,5 +167,4 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 			ctx.sendMessage("NO IMGUR", m.Tts)
 		}
 	}
-
 }
