@@ -10,73 +10,97 @@ import (
 	"layeh.com/gopus"
 )
 
-// number of individual samples per batch (counting all channels)
-const samplesPerBatch = 1920
+// number of individual samples per channel per batch
+const samplesPerChannelPerBatch = 1920
 
 var log = logging.MustGetLogger("wav")
 
-func Load(filename string) (<-chan []byte, <-chan struct{}, error) {
+func Load(filename string, ch chan<- []byte) (<-chan struct{}, error) {
 	cfname := C.CString(filename)
 	wav := C.drwav_open_file(cfname)
 	if wav == nil {
-		return nil, nil, fmt.Errorf("Unable to initialize drwav.")
+		close(ch)
+		return nil, fmt.Errorf("Unable to initialize drwav.")
 	}
 
 	if int(wav.channels) != 2 {
 		C.drwav_close(wav)
-		return nil, nil, fmt.Errorf("Wrong number of channels!")
+		close(ch)
+		return nil, fmt.Errorf("Wrong number of channels!")
 	}
 
 	if int(wav.sampleRate) != 48000 {
 		C.drwav_close(wav)
-		return nil, nil, fmt.Errorf("Wrong sample rate.")
+		close(ch)
+		return nil, fmt.Errorf("Wrong sample rate.")
 	}
 
-	ch := make(chan []byte, 1024*32)
 	enc, err := gopus.NewEncoder(int(wav.sampleRate), int(wav.channels), gopus.Audio)
 	if err != nil {
-		return nil, nil, err
+		close(ch)
+		return nil, err
 	}
 
-	doneCh := make(chan struct{})
-	encoderCh := make(chan []int16, 2*48000*2)
-	go func() {
-		buf := C.malloc(C.size_t(samplesPerBatch * wav.bytesPerSample))
+	done := make(chan struct{}, 1)
+	go func(wav *C.drwav) {
+		defer close(done)
+		defer close(ch)
+
+		samplesPerBatch := samplesPerChannelPerBatch * int(wav.channels)
+		batchSize := samplesPerBatch * int(wav.bytesPerSample)
+
+		buf := C.malloc(C.size_t(batchSize))
 		defer C.free(buf)
 		defer C.drwav_close(wav)
 
-		for i := 0; i < (int(wav.totalSampleCount)/samplesPerBatch)+1; i++ {
-			readSamples := C.drwav_read_s16(wav, samplesPerBatch, (*C.dr_int16)(buf))
+		elems := make([]int16, samplesPerBatch)
+		idx := 0
+
+		for i := 0; i*samplesPerBatch <= int(wav.totalSampleCount); i += 1 {
+			readSamples := C.drwav_read_s16(wav, C.dr_uint64(samplesPerBatch), (*C.dr_int16)(buf))
 			slc := (*[1 << 30]int16)(buf)[:readSamples:readSamples]
 
-			encoderCh <- slc
+			readIdx := 0
 
-			if readSamples < samplesPerBatch {
+			for {
+				batchSamplesToFill := samplesPerBatch - idx
+				readSamplesRemaining := int(readSamples) - readIdx
+
+				// break if we don't have enough samples to fill the rest of the buffer
+				if readSamplesRemaining < batchSamplesToFill {
+					break
+				}
+
+				copy(elems[idx:], slc[readIdx:readIdx+batchSamplesToFill])
+				idx = 0
+				readIdx += batchSamplesToFill
+
+				b, err := processPCM(wav, enc, elems[:])
+				if err != nil {
+					log.Errorf("error encoding pcm: %q", err)
+					continue
+				}
+				ch <- b
+			}
+
+			batchSamplesToFill := samplesPerBatch - idx
+			readSamplesRemaining := int(readSamples) - readIdx
+			if readSamplesRemaining >= batchSamplesToFill {
+				log.Fatalf("Had enough samples to fill batch after for loop.")
+			}
+
+			copy(elems[idx:], slc)
+			idx += len(slc)
+
+			if int(readSamples) < samplesPerBatch {
 				break
 			}
 		}
-		close(encoderCh)
-	}()
+	}(wav)
 
-	go func(channels int) {
-		elems := []int16{}
-		for v := range encoderCh {
-			elems = append(elems, v...)
+	return done, nil
+}
 
-			if len(elems) > samplesPerBatch*channels {
-				opus, err := enc.Encode(elems[:samplesPerBatch*channels], samplesPerBatch, samplesPerBatch*channels*2)
-				elems = elems[samplesPerBatch*channels:]
-				if err != nil {
-					log.Errorf("Error encoding opus audio: %q", err)
-					continue
-				}
-				ch <- opus
-			}
-		}
-
-		close(ch)
-		close(doneCh)
-	}(int(wav.channels))
-
-	return ch, doneCh, nil
+func processPCM(wav *C.drwav, enc *gopus.Encoder, data []int16) ([]byte, error) {
+	return enc.Encode(data, len(data)/int(wav.channels), len(data)*2)
 }
