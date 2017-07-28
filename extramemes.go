@@ -2,6 +2,7 @@ package thulani
 
 import (
 	"math/rand"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -13,6 +14,7 @@ func init() {
 var extraMemes = []func(*messageCtx) MemeStatus{
 	respondToFuckYou,
 	respondToMeme,
+	respondToRaaaaaaaaaaaay,
 }
 
 var hateMatch = []string{
@@ -69,4 +71,16 @@ func respondToMeme(ctx *messageCtx) MemeStatus {
 
 	ctx.sendMessage("i am not yet capable of memeing.", false)
 	return Interrupt
+}
+
+var ray = regexp.MustCompile("ra+y")
+
+// TODO: play the sound clip
+func respondToRaaaaaaaaaaaay(ctx *messageCtx) MemeStatus {
+	if ctx.Matched && ray.MatchString(ctx.Command) {
+		ctx.sendMessage(ctx.Command, true)
+		return Interrupt
+	}
+
+	return Continue
 }
