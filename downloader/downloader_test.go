@@ -16,7 +16,7 @@ func TestGetUrl(t *testing.T) {
 }
 
 func TestDownload(t *testing.T) {
-	if err := Download("https://www.youtube.com/watch?v=_K13GJkGvDw", 10*time.Second, 10*time.Second); err != nil {
+	if _, err := Download("https://www.youtube.com/watch?v=_K13GJkGvDw", 10*time.Second, 10*time.Second); err != nil {
 		t.Fatal(err)
 	}
 }

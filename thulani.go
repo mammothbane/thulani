@@ -8,7 +8,10 @@ import (
 	"strings"
 	"syscall"
 
+	"time"
+
 	"github.com/bwmarrin/discordgo"
+	"github.com/mammothbane/thulani-go/downloader"
 )
 
 var config *Config
@@ -97,6 +100,33 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if err != nil {
 		log.Errorf("error constructing message context: %q", err)
 		return
+	}
+
+	for _, v := range ctx.Guild.Channels {
+		if v.Type == "voice" && v.Name == "General" {
+			conn, err := ctx.ChannelVoiceJoin(ctx.Guild.ID, v.ID, false, false)
+			if err != nil {
+				log.Errorf("unable to join voice channel: %q", err)
+				break
+			}
+
+			ch, err := downloader.Download("https://www.youtube.com/watch?v=_K13GJkGvDw", 10*time.Second, 10*time.Second)
+			if err != nil {
+				log.Errorf("unable to download video")
+				break
+			}
+
+			conn.Speaking(true)
+			go func() {
+				defer conn.Speaking(false)
+
+				for i := range ch {
+					conn.OpusSend <- i
+				}
+			}()
+
+			break
+		}
 	}
 
 	for _, v := range extraMemes {

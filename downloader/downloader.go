@@ -9,7 +9,9 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/cryptix/wav"
+	"fmt"
+
+	"github.com/mammothbane/thulani-go/wav"
 	"github.com/op/go-logging"
 )
 
@@ -30,10 +32,10 @@ func getUrl(inUrl string) (string, error) {
 	return out, nil
 }
 
-func Download(inUrl string, startTime time.Duration, duration time.Duration) error {
+func Download(inUrl string, startTime time.Duration, duration time.Duration) (<-chan []byte, error) {
 	targetUrl, err := getUrl(inUrl)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	startSecond := int(startTime.Seconds())
@@ -44,7 +46,7 @@ func Download(inUrl string, startTime time.Duration, duration time.Duration) err
 		"-i", targetUrl,
 		"-c:a", "pcm_s16le",
 		"-f", "wav",
-		"-ar", "44100",
+		"-ar", "48000",
 		"-ac", "2",
 		"-vn", "-y",
 	}
@@ -53,34 +55,40 @@ func Download(inUrl string, startTime time.Duration, duration time.Duration) err
 		args = append(args, "-t", strconv.Itoa(dur))
 	}
 
-	file, err := ioutil.TempFile("", "dl")
+	file, err := ioutil.TempFile("", "thulani_")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer func() {
+
+	clearTemp := func() {
 		if err := os.Remove(file.Name()); err != nil {
 			log.Errorf("unable to remove temp file: %q", err)
 		}
-	}()
+	}
 
 	args = append(args, file.Name())
+	//args = append(args, "out.wav")
+
+	fmt.Println(args)
 
 	dl := exec.Command(`ffmpeg`, args...)
 	b, err := dl.CombinedOutput()
 	if err != nil {
+		clearTemp()
 		log.Errorf("ffmpeg failed: \n%v", string(b))
-		return err
+		return nil, err
 	}
 
-	info, err := os.Stat(file.Name())
+	ch, done, err := wav.Load(file.Name())
 	if err != nil {
-		return err
+		clearTemp()
+		return nil, err
 	}
 
-	_, err = wav.NewReader(file, info.Size())
-	if err != nil {
-		return err
-	}
+	go func() {
+		<-done
+		clearTemp()
+	}()
 
-	return nil
+	return ch, err
 }

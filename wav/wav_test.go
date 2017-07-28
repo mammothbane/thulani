@@ -8,7 +8,7 @@ import (
 func TestLoad(t *testing.T) {
 	ch, err := Load("../downloader/out.wav")
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
 	ct := 0
