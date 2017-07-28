@@ -5,5 +5,7 @@
   "op_role": "bot-op",
   "server": "example server",
   "voice_channel": "General",
-  "token": 12391823918
+  "token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "client_id": "abcd",
+  "client_secret": "efgh"
 }

@@ -25,6 +25,8 @@ func newCtx(s *discordgo.Session, m *discordgo.MessageCreate) (*messageCtx, erro
 	matches := regex.FindStringSubmatch(m.Content)
 	command := ""
 
+	log.Debugf("matches: %v", matches)
+
 	if len(matches) != 0 {
 		command = strings.Split(matches[1], " ")[0]
 	}
@@ -66,7 +68,7 @@ func newCtx(s *discordgo.Session, m *discordgo.MessageCreate) (*messageCtx, erro
 		MessageCreate: m,
 
 		Command: command,
-		Matched: len(matches) == 0,
+		Matched: len(matches) != 0,
 
 		Channel: channel,
 		Guild:   guild,
@@ -75,7 +77,7 @@ func newCtx(s *discordgo.Session, m *discordgo.MessageCreate) (*messageCtx, erro
 }
 
 func (ctx *messageCtx) sendMessage(str string, tts bool) {
-	if !ctx.Tts {
+	if !tts {
 		ctx.ChannelMessageSend(ctx.ChannelID, str)
 		return
 	}

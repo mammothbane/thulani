@@ -1,7 +1,6 @@
 package thulani
 
 import (
-	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
@@ -17,31 +16,15 @@ var regex *regexp.Regexp
 
 func Run(conf *Config) {
 	config = conf
-	regex = regexp.MustCompile("(?i)^[!/]" + conf.Trigger + " (.*)")
+	regex = regexp.MustCompile(`(?i)^[!/]` + conf.Trigger + " (.*)")
 
 	dg, err := discordgo.New("Bot " + conf.Token)
 	handle(err)
 
 	dg.AddHandler(onReady)
 	dg.AddHandler(onMessage)
+	dg.AddHandler(onGuildCreate)
 	dg.Open()
-
-	joined := false
-
-	for !joined {
-		for _, v := range dg.State.Guilds {
-			if v.Name == conf.Server {
-				joined = true
-				break
-			}
-		}
-
-		if !joined {
-			fmt.Println("Please input the token for whatever the fuck.")
-			var response string
-			fmt.Scanln(&response)
-		}
-	}
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
@@ -52,6 +35,52 @@ func Run(conf *Config) {
 
 func onReady(s *discordgo.Session, m *discordgo.Ready) {
 	log.Infof("Logged in as %v (%v)", m.User.Username, m.User.ID)
+
+	_, err := s.UserUpdate("", "", "thulani", "https://cdn.discordapp.com/attachments/90548758458167296/338518035256311809/todd.png", "")
+	if err != nil {
+		log.Errorf("error updating user: %v", err)
+	}
+
+	s.UpdateStatus(0, "literally nothing")
+
+	joined := false
+	for _, v := range m.Guilds {
+		if v.Name == config.Server {
+			joined = true
+			break
+		}
+	}
+
+	if !joined {
+		log.Warningf("Server in config not available! Click here to enable thulani on your server: %v", oauthUrl())
+	}
+}
+
+func onGuildCreate(s *discordgo.Session, m *discordgo.GuildCreate) {
+	member, err := s.GuildMember(m.Guild.ID, s.State.User.ID)
+	if err != nil {
+		log.Warningf("joined guild %v but was unable to get member id: %q", m.Name, err)
+	}
+
+	for _, role := range m.Roles {
+		for _, mRole := range member.Roles {
+			if role.ID == mRole {
+				log.Infof("joined guild %v with role: %v (%v)", m.Name, role.Name, role.ID)
+
+				if role.Permissions&requestedPerms != requestedPerms {
+					log.Errorf("server didn't grant us the desired permissions.")
+					s.GuildLeave(m.Guild.ID)
+					log.Warningf("Don't disable any permissions or thulani will be a little sponge man! Click here to die: %v", oauthUrl())
+					return
+				}
+			}
+		}
+	}
+
+	err = s.GuildMemberNickname(m.Guild.ID, "@me", "newlani")
+	if err != nil {
+		log.Warningf("unable to update nickname: %q", err)
+	}
 }
 
 func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -64,6 +93,16 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	ctx, err := newCtx(s, m)
 	if err != nil {
 		log.Errorf("error constructing message context: %q", err)
+		return
+	}
+
+	for _, v := range extraMemes {
+		v(ctx)
+	}
+
+	if !ctx.Matched {
+		log.Infof("Message didn't match. Ignoring.")
+		return
 	}
 
 	if ctx.Channel.IsPrivate {
@@ -71,7 +110,7 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if ctx.Channel.GuildID != config.Server {
+	if ctx.Guild.Name != config.Server {
 		log.Infof("Wrong guild. Ignoring.")
 		return
 	}
@@ -88,42 +127,34 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return false
 	}
 
-	//fmap := map[string]func(){
-	//	"sup": func() {},
-	//}[ctx.Command]
-
-	switch ctx.Command {
-	case "skip":
-		break
-
-	case "die":
-		break
-
-	default:
-		target, err := url.Parse(ctx.Command)
-		if err != nil {
-			log.Errorf("Url parse failed: %q", err)
-			ctx.sendMessage("format your commands right. fuck you.", m.Tts)
-			return
-		}
-
-		if target.Path == "" || (target.Path == "/watch" && len(target.Query()) == 0) {
-			log.Warningf("Bad url format: %q", ctx.Command)
-			ctx.sendMessage("that\nis\na\nbad\nurl", m.Tts)
-			return
-		}
-
-		if strings.Contains(target.Hostname(), "imgur") {
-			log.Infof("Ignoring imgur link.")
-
-			if m.Author.Username == "boomshticky" {
-				ctx.sendMessage("fuck you conway", true)
-			} else {
-				ctx.sendMessage("NO IMGUR", m.Tts)
-			}
-			break
-		}
-
-		// TODO: play audio
+	fn, ok := cmdMap[strings.ToLower(ctx.Command)]
+	if ok {
+		fn(ctx)
+		return
 	}
+
+	// it's not a command we know; we're looking for a url
+	target, err := url.Parse(ctx.Command)
+	if err != nil {
+		log.Errorf("Url parse failed: %q", err)
+		ctx.sendMessage("format your commands right. fuck you.", m.Tts)
+		return
+	}
+
+	if target.Path == "" || (target.Path == "/watch" && len(target.Query()) == 0) {
+		log.Warningf("Bad url format: %q", ctx.Command)
+		ctx.sendMessage("that\nis\na\nbad\nurl", m.Tts)
+		return
+	}
+
+	if strings.Contains(target.Hostname(), "imgur") {
+		log.Infof("Ignoring imgur link.")
+
+		if m.Author.Username == "boomshticky" {
+			ctx.sendMessage("fuck you conway", true)
+		} else {
+			ctx.sendMessage("NO IMGUR", m.Tts)
+		}
+	}
+
 }

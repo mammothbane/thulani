@@ -4,6 +4,13 @@ import (
 	"encoding/json"
 	"os"
 
+	"net/url"
+
+	"strconv"
+
+	"sync"
+
+	"github.com/bwmarrin/discordgo"
 	"github.com/op/go-logging"
 )
 
@@ -12,13 +19,13 @@ const help = `wew lad. you should know these commands already.
 Usage: ` + "`!thulani [command]`" + `
 
 commands:
-**help**:\t\t\t\tprint this help message
-**[url]**:\t\t\t   a url with media that thulani can play. queued up to play after everything that's already waiting.
-**list, queue**:\tlist items in the queue, as well as the currently-playing item.
-**pause**:\t\t\tpause sound.
-**resume**:\t\t resume sound.
-**die**:\t\t\t\t empty the queue and stop playing.
-**skip**:\t\t\t   skip the current item.
+**help**:				print this help message
+**[url]**:			   a url with media that thulani can play. queued up to play after everything that's already waiting.
+**list, queue**:	list items in the queue, as well as the currently-playing item.
+**pause**:			pause sound.
+**resume**:		 resume sound.
+**die**:				 empty the queue and stop playing.
+**skip**:			   skip the current item.
 `
 
 var log = logging.MustGetLogger("thulani")
@@ -31,6 +38,8 @@ type Config struct {
 	Server       string `json:"server"`
 	VoiceChannel string `json:"voice_channel"`
 	Token        string `json:"token"`
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
 }
 
 func handle(err error) {
@@ -48,4 +57,39 @@ func LoadConfig(filename string) (*Config, error) {
 	var conf Config
 	err = json.NewDecoder(file).Decode(&conf)
 	return &conf, err
+}
+
+var _oauthUrl string
+var oauthOnce sync.Once
+
+const requestedPerms = discordgo.PermissionEmbedLinks |
+	discordgo.PermissionReadMessages |
+	discordgo.PermissionAddReactions |
+	discordgo.PermissionSendMessages |
+	discordgo.PermissionSendTTSMessages |
+	discordgo.PermissionMentionEveryone |
+	discordgo.PermissionUseExternalEmojis |
+	discordgo.PermissionVoiceConnect |
+	discordgo.PermissionVoiceSpeak |
+	discordgo.PermissionChangeNickname |
+	discordgo.PermissionVoiceUseVAD |
+	discordgo.PermissionAttachFiles
+
+func oauthUrl() string {
+	oauthOnce.Do(func() {
+		oUrl, err := url.Parse("https://discordapp.com/api/oauth2/authorize")
+		if err != nil {
+			panic(err)
+		}
+
+		q := oUrl.Query()
+		q.Add("scope", "bot")
+		q.Add("permissions", strconv.Itoa(requestedPerms))
+		q.Add("client_id", config.ClientID)
+		oUrl.RawQuery = q.Encode()
+
+		_oauthUrl = oUrl.String()
+	})
+
+	return _oauthUrl
 }
