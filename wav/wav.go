@@ -1,177 +1,53 @@
 package wav
 
+// #define DR_WAV_IMPLEMENTATION
+// #include "dr_wav.h"
+import "C"
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"os"
 )
 
-type WavFile struct {
-	Header Header
-	Format FormatChunk
-	Data   DataChunk
-}
+const batchSize = 64
 
-type Header struct {
-	GroupID    [4]uint8
-	FileLength uint32
-	RiffType   [4]uint8
-}
-
-type FormatChunk struct {
-	GroupID    [4]uint8
-	ChunkSize  uint32
-	FormatTag  uint16
-	Channels   uint16
-	SampleRate uint32
-	ByteRate   uint32
-	Alignment  uint16
-	BitDensity uint32
-}
-
-type DataChunk struct {
-	GroupID   [4]uint8
-	ChunkSize uint32
-	Samples   io.Reader
-}
-
-func Load(filename string) (*WavFile, error) {
-	file, err := os.Open(filename)
-
-	if err != nil {
-		return nil, err
+func Load(filename string) (<-chan [2]int16, error) {
+	cfname := C.CString(filename)
+	wav := C.drwav_open_file(cfname)
+	if wav == nil {
+		return nil, fmt.Errorf("Unable to initialize drwav.")
 	}
 
-	load16 := func(b []byte) (uint16, error) {
-		var out uint16
-		err := binary.Read(bytes.NewBuffer(b), binary.LittleEndian, &out)
-		return out, err
+	if int(wav.channels) != 2 {
+		C.drwav_close(wav)
+		return nil, fmt.Errorf("Wrong number of channels!")
 	}
 
-	load32 := func(b []byte) (uint32, error) {
-		var out uint32
-		err := binary.Read(bytes.NewBuffer(b), binary.LittleEndian, &out)
-		return out, err
-
+	if int(wav.sampleRate) != 44100 {
+		C.drwav_close(wav)
+		return nil, fmt.Errorf("Wrong sample rate.")
 	}
 
-	b, err := ioutil.ReadAll(io.LimitReader(file, 40))
-	if err != nil {
-		return nil, err
-	}
+	ch := make(chan [2]int16, 1024*32)
 
-	h := Header{}
-	h.FileLength, err = load32(b[4:36])
-	if err != nil {
-		return nil, err
-	}
-	h.FileLength -= 8 // subtract RIFF/WAVE markers
+	go func() {
+		buf := C.malloc(C.size_t(batchSize * wav.bytesPerSample))
+		defer C.free(buf)
+		defer C.drwav_close(wav)
 
-	for i := 0; i < 4; i++ {
-		h.GroupID[i] = b[i]
-		h.RiffType[i] = b[i+36]
-	}
+		for i := 0; i < int(wav.totalSampleCount)/batchSize; i++ {
+			readSamples := C.drwav_read_s16(wav, batchSize, (*C.dr_int16)(buf))
 
-	fmt.Println(h)
-	fmt.Println(string(h.RiffType[:]))
+			slc := (*[1 << 30]int16)(buf)[:readSamples:readSamples]
 
-	if string(h.GroupID[:]) != "RIFF" { // || string(h.RiffType[:]) != "WAVE" {
-		return nil, fmt.Errorf("invalid header!")
-	}
+			for i := 0; i < int(readSamples); i += 2 {
+				ch <- [2]int16{slc[i], slc[i+1]}
+			}
 
-	f := FormatChunk{}
+			if readSamples < batchSize {
+				break
+			}
+		}
+		close(ch)
+	}()
 
-	file.Seek(40, io.SeekStart)
-	b, err = ioutil.ReadAll(io.LimitReader(file, 36))
-	if err != nil {
-		return nil, err
-	}
-
-	for i := 0; i < 4; i++ {
-		f.GroupID[i] = b[i]
-	}
-
-	f.ChunkSize, err = load32(b[4:36])
-	if err != nil {
-		return nil, err
-	}
-
-	file.Seek(76, io.SeekStart)
-	b, err = ioutil.ReadAll(io.LimitReader(file, int64(f.ChunkSize)))
-	if err != nil {
-		return nil, err
-	}
-
-	f.FormatTag, err = load16(b[36:52])
-	if err != nil {
-		return nil, err
-	}
-
-	f.Channels, err = load16(b[52:68])
-	if err != nil {
-		return nil, err
-	}
-
-	f.SampleRate, err = load32(b[68:100])
-	if err != nil {
-		return nil, err
-	}
-
-	f.ByteRate, err = load32(b[100:132])
-	if err != nil {
-		return nil, err
-	}
-
-	f.Alignment, err = load16(b[132:148])
-	if err != nil {
-		return nil, err
-	}
-
-	f.BitDensity, err = load32(b[138:180])
-	if err != nil {
-		return nil, err
-	}
-
-	if string(f.GroupID[:]) != "fmt " ||
-		f.FormatTag != 1 ||
-		f.Alignment != uint16((uint32(f.Channels)*f.BitDensity/8)&0xff) {
-		return nil, fmt.Errorf("invalid format block!")
-	}
-
-	if f.BitDensity != 16 || f.Channels != 2 || f.SampleRate != 44100 {
-		return nil, fmt.Errorf("wrong pcm format!")
-	}
-
-	d := DataChunk{}
-
-	file.Seek(220, io.SeekStart)
-	b, err = ioutil.ReadAll(io.LimitReader(file, 36))
-	if err != nil {
-		return nil, err
-	}
-
-	for i := 0; i < 4; i++ {
-		d.GroupID[i] = b[i]
-	}
-
-	d.ChunkSize, err = load32(b[4:])
-	if err != nil {
-		return nil, err
-	}
-
-	if string(f.GroupID[:]) != "fmt " {
-		return nil, fmt.Errorf("invalid data block!")
-	}
-
-	file.Seek(256, io.SeekStart)
-	d.Samples = io.LimitReader(file, int64(d.ChunkSize))
-
-	return &WavFile{
-		Header: h,
-		Format: f,
-		Data:   d,
-	}, nil
+	return ch, nil
 }

@@ -72,9 +72,15 @@ func Download(inUrl string, startTime time.Duration, duration time.Duration) err
 		return err
 	}
 
-	wav.NewReader(file, )
+	info, err := os.Stat(file.Name())
+	if err != nil {
+		return err
+	}
 
-
+	_, err = wav.NewReader(file, info.Size())
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
