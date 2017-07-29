@@ -25,8 +25,6 @@ func newCtx(s *discordgo.Session, m *discordgo.MessageCreate) (*messageCtx, erro
 	matches := regex.FindStringSubmatch(m.Content)
 	command := ""
 
-	log.Debugf("matches: %v", matches)
-
 	if len(matches) != 0 {
 		command = strings.Split(matches[1], " ")[0]
 	}

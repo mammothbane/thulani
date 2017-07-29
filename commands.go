@@ -1,5 +1,7 @@
 package thulani
 
+import "github.com/mammothbane/thulani-go/downloader"
+
 var cmdMap = map[string]func(*messageCtx){
 	"help":   printHelp,
 	"skip":   commandNotImplemented,

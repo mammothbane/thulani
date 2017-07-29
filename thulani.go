@@ -1,14 +1,12 @@
 package thulani
 
 import (
-	"math/rand"
 	"net/url"
 	"os"
 	"os/signal"
 	"regexp"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/mammothbane/thulani-go/downloader"
@@ -106,11 +104,6 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if err := manager.Enqueue("https://www.youtube.com/watch?v=_K13GJkGvDw", time.Duration(rand.Intn(10*60))*time.Second, 5*time.Second); err != nil {
-		log.Errorf("unable to enqueue video: %q", err)
-		return
-	}
-
 	for _, v := range extraMemes {
 		v(ctx)
 	}
@@ -179,4 +172,11 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 			ctx.sendMessage("NO IMGUR", m.Tts)
 		}
 	}
+
+	if err := manager.Enqueue(target.String(), 0, 0); err != nil {
+		log.Errorf("unable to enqueue video: %q", err)
+		ctx.sendMessage("you fucked up the video.", ctx.Tts)
+		return
+	}
+	log.Infof("started playing from: %q", target.String())
 }
