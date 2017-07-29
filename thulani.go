@@ -10,9 +10,10 @@ import (
 
 	"time"
 
+	"math/rand"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/mammothbane/thulani-go/downloader"
-	"math/rand"
 )
 
 var config *Config
@@ -113,7 +114,7 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 			ch, err := downloader.Download("https://www.youtube.com/watch?v=_K13GJkGvDw", time.Duration(rand.Intn(10*60))*time.Second, 5*time.Second)
 			if err != nil {
-				log.Errorf("unable to download video")
+				log.Errorf("unable to download video: %q", err)
 				break
 			}
 

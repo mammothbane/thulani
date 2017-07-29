@@ -9,56 +9,74 @@ import (
 	"io/ioutil"
 	"os"
 
+	"encoding/json"
+
 	"github.com/mammothbane/thulani-go/wav"
 	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("downloader")
 
-func getUrl(inUrl string) (string, error) {
-	dl := exec.Command("youtube-dl", "-f", "bestaudio", "-x", "--get-url", inUrl)
+// responsible for decoding from youtube
+type videoInfo struct {
+	Title       string        `json:"fulltitle"`
+	UrlStr      string        `json:"url"`
+	DurationSec int           `json:"duration"`
+	Url         *url.URL      `json:"-"`
+	Duration    time.Duration `json:"-"`
+}
+
+func info(inUrl string) (*videoInfo, error) {
+	dl := exec.Command("youtube-dl", "-f", "bestaudio", "-x", "-j", inUrl)
 
 	outpipe, err := dl.StdoutPipe()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	errpipe, err := dl.StderrPipe()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	err = dl.Start()
 	if err != nil {
 		log.Errorf("starting youtube-dl failed")
-		return "", err
+		return nil, err
 	}
 
 	o, ierr := ioutil.ReadAll(outpipe)
 	if ierr != nil {
 		log.Errorf("unable to read from output pipe")
-		return "", err
+		return nil, err
 	}
 
 	e, ierr := ioutil.ReadAll(errpipe)
 	if ierr != nil {
 		log.Errorf("unable to read from error pipe")
-		return "", err
+		return nil, err
 	}
 
 	if err := dl.Wait(); err != nil {
 		log.Errorf("error:\n%v", string(e))
-		return "", err
+		return nil, err
 	}
 
-	tgt, err := url.Parse(string(o))
-	out := tgt.Scheme + "://" + tgt.Host + tgt.Path + "?" + tgt.Query().Encode()
+	v := videoInfo{}
+	if err := json.Unmarshal(o, &v); err != nil {
+		return nil, err
+	}
 
-	return out, nil
+	v.Duration = time.Duration(v.DurationSec) * time.Second
+	v.Url, err = url.Parse(v.UrlStr)
+
+	//tgt, err := url.Parse(string(o))
+	//out := tgt.Scheme + "://" + tgt.Host + tgt.Path + "?" + tgt.Query().Encode()
+	return &v, err
 }
 
 func Download(inUrl string, startTime time.Duration, duration time.Duration) (<-chan []byte, error) {
-	targetUrl, err := getUrl(inUrl)
+	vInfo, err := info(inUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +86,7 @@ func Download(inUrl string, startTime time.Duration, duration time.Duration) (<-
 
 	args := []string{
 		"-ss", strconv.Itoa(startSecond),
-		"-i", targetUrl,
+		"-i", vInfo.Url.String(),
 		"-c:a", "pcm_s16le",
 		"-f", "wav",
 		"-ar", "48000",
