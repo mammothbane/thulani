@@ -11,18 +11,15 @@ type DlMessage int
 const (
 	Clear DlMessage = iota
 	Pause
-	Resume
+	Play
 )
 
-type connUpdate int
-
-const (
-	attach connUpdate = iota
-	detach
-)
+type playBundle struct {
+	data <-chan []byte
+	conn *discordgo.VoiceConnection
+}
 
 type DownloadManager struct {
-	conn    *discordgo.VoiceConnection
 	session *discordgo.Session
 	guildID string
 	voiceID string
@@ -32,25 +29,23 @@ type DownloadManager struct {
 	playStateChan  chan DlMessage
 	proxyStateChan chan DlMessage
 
-	connUpdate chan connUpdate
-	proxyChan  chan []byte
+	proxyChan chan playBundle
 }
 
 const proxyBufSize = 512
 
 func NewManager(s *discordgo.Session, guildID string, voiceChanID string) *DownloadManager {
 	dm := &DownloadManager{
-		session:    s,
-		dls:        make(chan *downloader),
-		connUpdate: make(chan connUpdate, 1),
-		PlayState:  make(chan DlMessage),
-		guildID:    guildID,
-		voiceID:    voiceChanID,
+		session:   s,
+		dls:       make(chan *downloader),
+		PlayState: make(chan DlMessage),
+		guildID:   guildID,
+		voiceID:   voiceChanID,
 
 		playStateChan: make(chan DlMessage),
 
 		proxyStateChan: make(chan DlMessage),
-		proxyChan:      make(chan []byte, proxyBufSize),
+		proxyChan:      make(chan playBundle),
 	}
 
 	go dm.teeStateMessages()
@@ -68,88 +63,55 @@ func (m *DownloadManager) teeStateMessages() {
 }
 
 func (m *DownloadManager) proxyOpusPackets() {
-	attachState := detach
-	playState := Resume
-	clear := false
-
 loop:
-	for {
-		if playState == Pause {
-			select {
-			case playState = <-m.proxyStateChan:
+	for bundle := range m.proxyChan {
+		playState := Play
+		bundle.conn.Speaking(true)
+
+		cleanup := func() {
+			bundle.conn.Speaking(false)
+			bundle.conn.Disconnect()
+		}
+
+		for {
+			switch playState {
+			case Clear:
+				for {
+					select {
+					case <-m.proxyChan:
+					default:
+					}
+				}
+				cleanup()
 				continue loop
-			}
-		}
-
-		select { // first check if we have a state update message coming in
-		case playState = <-m.proxyStateChan:
-			continue loop
-		default:
-		}
-
-		// if we're clearing, empty
-		if clear {
-			for {
-				select {
-				case <-m.proxyChan:
+			case Pause:
+				playState = <-m.proxyStateChan
+			case Play:
+				select { // first check if we have a state update message coming in
 				case playState = <-m.proxyStateChan:
-					continue loop
-				default:
+				case bundle.conn.OpusSend <- <-bundle.data:
 				}
 			}
 		}
-
-		select {
-		case upd := <-m.connUpdate:
-			attachState = upd
-		default:
-		}
-
-		if attachState == attach {
-			select {
-			case attachState = <-m.connUpdate:
-			case m.conn.OpusSend <- <-m.proxyChan:
-			}
-		} else {
-			select {
-			case attachState = <-m.connUpdate:
-			}
-		}
+		cleanup()
 	}
 }
 
 func (m *DownloadManager) playFromQueue() {
-	//timer := time.After(5*time.Second)
-
-	for {
-		select {
-		case dl := <-m.dls:
-			if m.conn == nil {
-				ch, err := m.session.ChannelVoiceJoin(m.guildID, m.voiceID, false, false)
-				if err != nil {
-					log.Errorf("unable to connect to the voice channel: %q", err)
-					time.Sleep(1 * time.Second)
-					break
-				}
-
-				m.conn = ch
-				m.connUpdate <- attach
-			}
-
-			m.conn.Speaking(true)
-			// todo: figure out how to do disconnection checking
-			dl.SendOn(m.proxyChan)
-			<-dl.done
-			m.conn.Speaking(false)
-			//case <-timer:
-			//	if m.conn != nil {
-			//		m.connUpdate<-detach
-			//		if err := m.conn.Disconnect(); err != nil {
-			//			log.Errorf("disconnecting from voice connection: %q", err)
-			//		}
-			//		m.conn = nil
-			//	}
+	for dl := range m.dls {
+		ch, err := m.session.ChannelVoiceJoin(m.guildID, m.voiceID, false, false)
+		if err != nil {
+			log.Errorf("unable to connect to the voice channel: %q", err)
+			time.Sleep(1 * time.Second)
+			break
 		}
+
+		out, done := dl.Start()
+		m.proxyChan <- playBundle{
+			data: out,
+			conn: ch,
+		}
+		<-done
 	}
 }
 

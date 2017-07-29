@@ -15,9 +15,9 @@ import (
 type downloader struct {
 	Url string
 
-	Start    time.Duration
-	Duration time.Duration
-	End      time.Duration
+	StartTime time.Duration
+	Duration  time.Duration
+	EndTime   time.Duration
 
 	once sync.Once
 	done chan struct{}
@@ -42,9 +42,9 @@ func newDownload(url string, startTime, dur time.Duration) (*downloader, error) 
 	dl := &downloader{
 		Url: url,
 
-		Start:    startTime,
-		Duration: dur,
-		End:      startTime + dur,
+		StartTime: startTime,
+		Duration:  dur,
+		EndTime:   startTime + dur,
 
 		done: make(chan struct{}, 1),
 		pb:   make(chan *wavBundle, preloadCount),
@@ -62,13 +62,15 @@ func (d *downloader) Stop() {
 	})
 }
 
-func (d *downloader) SendOn(ch chan<- []byte) <-chan struct{} {
-	out := make(chan struct{}, 1)
+func (d *downloader) Start() (<-chan []byte, <-chan struct{}) {
+	out := make(chan []byte, 1024)
+	done := make(chan struct{}, 1)
 
 	go func() {
+		defer close(done)
 		defer close(out)
 		for wavB := range d.pb {
-			wavB.wav.Start(ch)
+			wavB.wav.Start(out)
 
 			select {
 			case <-d.done:
@@ -81,22 +83,22 @@ func (d *downloader) SendOn(ch chan<- []byte) <-chan struct{} {
 		}
 	}()
 
-	return out
+	return out, done
 }
 
 func (d *downloader) schedule() {
 	defer close(d.pb)
 	for i := 0; ; i++ {
-		clipStart := time.Duration(i)*clipTime + d.Start
-		clipEnd := time.Duration(i+1)*clipTime + d.Start
+		clipStart := time.Duration(i)*clipTime + d.StartTime
+		clipEnd := time.Duration(i+1)*clipTime + d.StartTime
 
-		if clipStart >= d.End {
+		if clipStart >= d.EndTime {
 			return
 		}
 
 		dur := clipTime
-		if clipEnd > d.End {
-			dur = d.End - clipStart
+		if clipEnd > d.EndTime {
+			dur = d.EndTime - clipStart
 		}
 
 		wavb, err := d.downloadSegment(clipStart, dur)
