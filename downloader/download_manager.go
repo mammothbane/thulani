@@ -24,7 +24,9 @@ const (
 type DownloadManager struct {
 	conn    *discordgo.VoiceConnection
 	session *discordgo.Session
-	dls     chan *Downloader
+	guildID string
+	voiceID string
+	dls     chan *downloader
 
 	PlayState      chan DlMessage
 	playStateChan  chan DlMessage
@@ -36,12 +38,14 @@ type DownloadManager struct {
 
 const proxyBufSize = 512
 
-func NewManager(s *discordgo.Session) *DownloadManager {
+func NewManager(s *discordgo.Session, guildID string, voiceChanID string) *DownloadManager {
 	dm := &DownloadManager{
 		session:    s,
-		dls:        make(chan *Downloader),
+		dls:        make(chan *downloader),
 		connUpdate: make(chan connUpdate, 1),
 		PlayState:  make(chan DlMessage),
+		guildID:    guildID,
+		voiceID:    voiceChanID,
 
 		playStateChan: make(chan DlMessage),
 
@@ -103,39 +107,54 @@ loop:
 
 		if attachState == attach {
 			select {
-			case upd := <-m.connUpdate:
-				attachState = upd
+			case attachState = <-m.connUpdate:
 			case m.conn.OpusSend <- <-m.proxyChan:
 			}
 		} else {
 			select {
-			case upd := <-m.connUpdate:
-				attachState = upd
+			case attachState = <-m.connUpdate:
 			}
 		}
 	}
 }
 
 func (m *DownloadManager) playFromQueue() {
-loop:
+	//timer := time.After(5*time.Second)
+
 	for {
 		select {
 		case dl := <-m.dls:
-			dl.SendOn(m.proxyChan)
-			select {
-			case <-dl.done:
-				continue loop
+			if m.conn == nil {
+				ch, err := m.session.ChannelVoiceJoin(m.guildID, m.voiceID, false, false)
+				if err != nil {
+					log.Errorf("unable to connect to the voice channel: %q", err)
+					time.Sleep(1 * time.Second)
+					break
+				}
 
-			case upd:=<-m.playStateChan:
-
+				m.conn = ch
+				m.connUpdate <- attach
 			}
 
+			m.conn.Speaking(true)
+			// todo: figure out how to do disconnection checking
+			dl.SendOn(m.proxyChan)
+			<-dl.done
+			m.conn.Speaking(false)
+			//case <-timer:
+			//	if m.conn != nil {
+			//		m.connUpdate<-detach
+			//		if err := m.conn.Disconnect(); err != nil {
+			//			log.Errorf("disconnecting from voice connection: %q", err)
+			//		}
+			//		m.conn = nil
+			//	}
 		}
 	}
 }
 
-func (m *DownloadManager) Enqueue(url string, startTime, endTime time.Duration) error {
-	dl, err := NewDownload(url, startTime, endTime)
+func (m *DownloadManager) Enqueue(url string, startTime, duration time.Duration) error {
+	dl, err := newDownload(url, startTime, duration)
 	if err != nil {
 		return err
 	}

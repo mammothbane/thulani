@@ -28,15 +28,27 @@ commands:
 var log = logging.MustGetLogger("thulani")
 
 type Config struct {
-	Trigger      string `json:"trigger"`
-	QueueSize    uint   `json:"queue_size"`
-	Admin        uint   `json:"admin"`
-	OpRole       string `json:"op_role"`
-	Server       string `json:"server"`
-	VoiceChannel string `json:"voice_channel"`
-	Token        string `json:"token"`
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
+	Trigger        string `json:"trigger"`
+	QueueSize      uint   `json:"queue_size"`
+	AdminID        uint   `json:"admin_id"`
+	OpRole         string `json:"op_role"`
+	GuildID        uint   `json:"guild_id"`
+	VoiceChannelID uint   `json:"voice_channel_id"`
+	Token          string `json:"token"`
+	ClientID       string `json:"client_id"`
+	ClientSecret   string `json:"client_secret"`
+}
+
+func (c *Config) GuildStr() string {
+	return strconv.Itoa(int(c.GuildID))
+}
+
+func (c *Config) VoiceChannelStr() string {
+	return strconv.Itoa(int(c.VoiceChannelID))
+}
+
+func (c *Config) AdminStr() string {
+	return strconv.Itoa(int(c.AdminID))
 }
 
 func handle(err error) {

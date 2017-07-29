@@ -11,18 +11,17 @@ import (
 	"github.com/mammothbane/thulani-go/wav"
 )
 
-// Downloader handles a download for a particular song.
-type Downloader struct {
+// downloader handles a download for a particular song.
+type downloader struct {
 	Url string
 
 	Start    time.Duration
 	Duration time.Duration
 	End      time.Duration
 
-	pause chan wav.State
-	once  sync.Once
-	done  chan struct{}
-	pb    chan *wavBundle
+	once sync.Once
+	done chan struct{}
+	pb   chan *wavBundle
 
 	info videoInfo
 }
@@ -30,7 +29,7 @@ type Downloader struct {
 const clipTime = 10 * time.Second
 const preloadCount = 5
 
-func NewDownload(url string, startTime, dur time.Duration) (*Downloader, error) {
+func newDownload(url string, startTime, dur time.Duration) (*downloader, error) {
 	vInfo, err := info(url)
 	if err != nil {
 		return nil, err
@@ -40,17 +39,16 @@ func NewDownload(url string, startTime, dur time.Duration) (*Downloader, error) 
 		dur = vInfo.Duration - startTime
 	}
 
-	dl := &Downloader{
+	dl := &downloader{
 		Url: url,
 
 		Start:    startTime,
 		Duration: dur,
 		End:      startTime + dur,
 
-		pause: make(chan wav.State),
-		done:  make(chan struct{}, 1),
-		pb:    make(chan *wavBundle, preloadCount),
-		info:  *vInfo,
+		done: make(chan struct{}, 1),
+		pb:   make(chan *wavBundle, preloadCount),
+		info: *vInfo,
 	}
 
 	go dl.schedule()
@@ -58,21 +56,13 @@ func NewDownload(url string, startTime, dur time.Duration) (*Downloader, error) 
 	return dl, nil
 }
 
-func (d *Downloader) Stop() {
+func (d *downloader) Stop() {
 	d.once.Do(func() {
 		close(d.done)
 	})
 }
 
-func (d *Downloader) Resume() {
-	d.pause <- wav.Resume
-}
-
-func (d *Downloader) Pause() {
-	d.pause <- wav.Pause
-}
-
-func (d *Downloader) SendOn(ch chan<- []byte) <-chan struct{} {
+func (d *downloader) SendOn(ch chan<- []byte) <-chan struct{} {
 	out := make(chan struct{}, 1)
 
 	go func() {
@@ -87,9 +77,6 @@ func (d *Downloader) SendOn(ch chan<- []byte) <-chan struct{} {
 
 			case <-wavB.wav.Done:
 				break
-
-			case elem := <-d.pause:
-				wavB.wav.PlayState <- elem
 			}
 		}
 	}()
@@ -97,34 +84,32 @@ func (d *Downloader) SendOn(ch chan<- []byte) <-chan struct{} {
 	return out
 }
 
-func (d *Downloader) schedule() {
-	go func() {
-		defer close(d.pb)
-		for i := 0; ; i++ {
-			clipStart := time.Duration(i)*clipTime + d.Start
-			clipEnd := time.Duration(i+1)*clipTime + d.Start
+func (d *downloader) schedule() {
+	defer close(d.pb)
+	for i := 0; ; i++ {
+		clipStart := time.Duration(i)*clipTime + d.Start
+		clipEnd := time.Duration(i+1)*clipTime + d.Start
 
-			if clipStart >= d.End {
-				return
-			}
-
-			dur := clipTime
-			if clipEnd > d.End {
-				dur = d.End - clipStart
-			}
-
-			wavb, err := d.download(clipStart, dur)
-			if err != nil {
-				log.Errorf("error setting up download: %q", err)
-				return
-			}
-
-			d.pb <- wavb
+		if clipStart >= d.End {
+			return
 		}
-	}()
+
+		dur := clipTime
+		if clipEnd > d.End {
+			dur = d.End - clipStart
+		}
+
+		wavb, err := d.downloadSegment(clipStart, dur)
+		if err != nil {
+			log.Errorf("error setting up download: %q", err)
+			return
+		}
+
+		d.pb <- wavb
+	}
 }
 
-func (d *Downloader) download(startTime, duration time.Duration) (*wavBundle, error) {
+func (d *downloader) downloadSegment(startTime, duration time.Duration) (*wavBundle, error) {
 	startSecond := int(startTime.Seconds())
 	args := []string{
 		"-ss", strconv.Itoa(startSecond),

@@ -12,13 +12,6 @@ import (
 	"layeh.com/gopus"
 )
 
-type State int
-
-const (
-	Pause State = iota
-	Resume
-)
-
 // number of individual samples per channel per batch
 const samplesPerChannelPerBatch = 1920
 
@@ -28,9 +21,6 @@ type Wav struct {
 	filename *C.char
 	enc      *gopus.Encoder
 	wav      *C.drwav
-
-	PlayState chan State
-	curState  State
 
 	once sync.Once
 	Done <-chan struct{}
@@ -67,9 +57,6 @@ func New(filename string) (*Wav, error) {
 		enc:      enc,
 		wav:      wav,
 
-		PlayState: make(chan State),
-		curState:  Resume,
-
 		done: done,
 		Done: done,
 	}, nil
@@ -101,31 +88,7 @@ func (w *Wav) Start(ch chan<- []byte) {
 
 			readIdx := 0
 
-		inner:
 			for {
-				// check to see if we should die or pause
-				if w.curState == Pause { // if paused wait to die or get resumed
-					select {
-					case st := <-w.PlayState:
-						w.curState = st
-						continue inner
-
-					case <-w.Done:
-						return
-					}
-
-				} else {
-					select {
-					case st := <-w.PlayState:
-						w.curState = st
-						continue inner
-
-					case <-w.Done:
-						return
-					default:
-					}
-				}
-
 				batchSamplesToFill := samplesPerBatch - idx
 				readSamplesRemaining := int(readSamples) - readIdx
 
@@ -143,7 +106,13 @@ func (w *Wav) Start(ch chan<- []byte) {
 					log.Errorf("error encoding pcm: %q", err)
 					continue
 				}
-				ch <- b
+
+				select {
+				case <-w.Done:
+					return
+				case ch <- b:
+
+				}
 			}
 
 			batchSamplesToFill := samplesPerBatch - idx

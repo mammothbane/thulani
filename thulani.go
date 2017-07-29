@@ -16,6 +16,7 @@ import (
 
 var config *Config
 var regex *regexp.Regexp
+var manager *downloader.DownloadManager
 
 func Run(conf *Config) {
 	//defer profile.Start(profile.ProfilePath("."), profile.BlockProfile).Stop()
@@ -45,7 +46,7 @@ func onReady(s *discordgo.Session, m *discordgo.Ready) {
 
 	joined := false
 	for _, v := range m.Guilds {
-		if v.Name == config.Server {
+		if v.ID != config.GuildStr() {
 			joined = true
 			break
 		}
@@ -54,6 +55,7 @@ func onReady(s *discordgo.Session, m *discordgo.Ready) {
 	if !joined {
 		log.Warningf("Server in config not available! Click here to enable thulani on your server: %v", oauthUrl())
 	}
+	manager = downloader.NewManager(s, config.GuildStr(), config.VoiceChannelStr())
 }
 
 func onGuildCreate(s *discordgo.Session, m *discordgo.GuildCreate) {
@@ -104,29 +106,9 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	for _, v := range ctx.Guild.Channels {
-		if v.Type == "voice" && v.Name == "General" {
-			conn, err := ctx.ChannelVoiceJoin(ctx.Guild.ID, v.ID, false, false)
-			if err != nil {
-				log.Errorf("unable to join voice channel: %q", err)
-				break
-			}
-
-			conn.Speaking(true)
-			go func(conn *discordgo.VoiceConnection) {
-				defer conn.Speaking(false)
-
-				dl, err := downloader.NewDownload("https://www.youtube.com/watch?v=_K13GJkGvDw", time.Duration(rand.Intn(10*60))*time.Second, 5*time.Second)
-				if err != nil {
-					log.Errorf("unable to download video: %q", err)
-					return
-				}
-
-				<-dl.SendOn(conn.OpusSend)
-			}(conn)
-
-			break
-		}
+	if err := manager.Enqueue("https://www.youtube.com/watch?v=_K13GJkGvDw", time.Duration(rand.Intn(10*60))*time.Second, 5*time.Second); err != nil {
+		log.Errorf("unable to enqueue video: %q", err)
+		return
 	}
 
 	for _, v := range extraMemes {
@@ -143,7 +125,7 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	if ctx.Guild.Name != config.Server {
+	if ctx.Guild.ID != config.GuildStr() {
 		log.Infof("Wrong guild. Ignoring.")
 		return
 	}
