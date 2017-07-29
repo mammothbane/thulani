@@ -1,16 +1,14 @@
 package thulani
 
 import (
+	"math/rand"
 	"net/url"
 	"os"
 	"os/signal"
 	"regexp"
 	"strings"
 	"syscall"
-
 	"time"
-
-	"math/rand"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/mammothbane/thulani-go/downloader"
@@ -20,6 +18,8 @@ var config *Config
 var regex *regexp.Regexp
 
 func Run(conf *Config) {
+	//defer profile.Start(profile.ProfilePath("."), profile.BlockProfile).Stop()
+
 	config = conf
 	regex = regexp.MustCompile(`(?i)^[!/]` + conf.Trigger + " (.*)")
 
@@ -112,20 +112,18 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 				break
 			}
 
-			ch, err := downloader.Download("https://www.youtube.com/watch?v=_K13GJkGvDw", time.Duration(rand.Intn(10*60))*time.Second, 5*time.Second)
-			if err != nil {
-				log.Errorf("unable to download video: %q", err)
-				break
-			}
-
 			conn.Speaking(true)
-			go func() {
+			go func(conn *discordgo.VoiceConnection) {
 				defer conn.Speaking(false)
 
-				for i := range ch {
-					conn.OpusSend <- i
+				dl, err := downloader.NewDownload("https://www.youtube.com/watch?v=_K13GJkGvDw", time.Duration(rand.Intn(10*60))*time.Second, 5*time.Second)
+				if err != nil {
+					log.Errorf("unable to download video: %q", err)
+					return
 				}
-			}()
+
+				<-dl.SendOn(conn.OpusSend)
+			}(conn)
 
 			break
 		}

@@ -75,18 +75,11 @@ func info(inUrl string) (*videoInfo, error) {
 	return &v, err
 }
 
-func Download(inUrl string, startTime time.Duration, duration time.Duration) (<-chan []byte, error) {
-	vInfo, err := info(inUrl)
-	if err != nil {
-		return nil, err
-	}
-
+func (d *DownloadManager) download(startTime, duration time.Duration) (<-chan []byte, error) {
 	startSecond := int(startTime.Seconds())
-	dur := int(duration.Seconds())
-
 	args := []string{
 		"-ss", strconv.Itoa(startSecond),
-		"-i", vInfo.Url.String(),
+		"-i", d.info.Url.String(),
 		"-c:a", "pcm_s16le",
 		"-f", "wav",
 		"-ar", "48000",
@@ -94,7 +87,8 @@ func Download(inUrl string, startTime time.Duration, duration time.Duration) (<-
 		"-vn", "-y",
 	}
 
-	if dur > 0 {
+	dur := int(duration.Seconds())
+	if dur > 0 && startTime+duration < d.info.Duration {
 		args = append(args, "-t", strconv.Itoa(dur))
 	}
 
