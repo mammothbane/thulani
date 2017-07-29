@@ -1,81 +1,130 @@
 package downloader
 
 import (
-	"net/url"
-	"os/exec"
-	"strconv"
-	"time"
-
 	"io/ioutil"
 	"os"
-
-	"encoding/json"
+	"os/exec"
+	"strconv"
+	"sync"
+	"time"
 
 	"github.com/mammothbane/thulani-go/wav"
-	"github.com/op/go-logging"
 )
 
-var log = logging.MustGetLogger("downloader")
+// Downloader handles a download for a particular song.
+type Downloader struct {
+	Url string
 
-// responsible for decoding from youtube
-type videoInfo struct {
-	Title       string        `json:"fulltitle"`
-	UrlStr      string        `json:"url"`
-	DurationSec int           `json:"duration"`
-	Url         *url.URL      `json:"-"`
-	Duration    time.Duration `json:"-"`
+	Start    time.Duration
+	Duration time.Duration
+	End      time.Duration
+
+	pause chan wav.State
+	once  sync.Once
+	done  chan struct{}
+	pb    chan *wavBundle
+
+	info videoInfo
 }
 
-func info(inUrl string) (*videoInfo, error) {
-	dl := exec.Command("youtube-dl", "-f", "bestaudio", "-x", "-j", inUrl)
+const clipTime = 10 * time.Second
+const preloadCount = 5
 
-	outpipe, err := dl.StdoutPipe()
+func NewDownload(url string, startTime, dur time.Duration) (*Downloader, error) {
+	vInfo, err := info(url)
 	if err != nil {
 		return nil, err
 	}
 
-	errpipe, err := dl.StderrPipe()
-	if err != nil {
-		return nil, err
+	if dur == 0 {
+		dur = vInfo.Duration - startTime
 	}
 
-	err = dl.Start()
-	if err != nil {
-		log.Errorf("starting youtube-dl failed")
-		return nil, err
+	dl := &Downloader{
+		Url: url,
+
+		Start:    startTime,
+		Duration: dur,
+		End:      startTime + dur,
+
+		pause: make(chan wav.State),
+		done:  make(chan struct{}, 1),
+		pb:    make(chan *wavBundle, preloadCount),
+		info:  *vInfo,
 	}
 
-	o, ierr := ioutil.ReadAll(outpipe)
-	if ierr != nil {
-		log.Errorf("unable to read from output pipe")
-		return nil, err
-	}
+	go dl.schedule()
 
-	e, ierr := ioutil.ReadAll(errpipe)
-	if ierr != nil {
-		log.Errorf("unable to read from error pipe")
-		return nil, err
-	}
-
-	if err := dl.Wait(); err != nil {
-		log.Errorf("error:\n%v", string(e))
-		return nil, err
-	}
-
-	v := videoInfo{}
-	if err := json.Unmarshal(o, &v); err != nil {
-		return nil, err
-	}
-
-	v.Duration = time.Duration(v.DurationSec) * time.Second
-	v.Url, err = url.Parse(v.UrlStr)
-
-	//tgt, err := url.Parse(string(o))
-	//out := tgt.Scheme + "://" + tgt.Host + tgt.Path + "?" + tgt.Query().Encode()
-	return &v, err
+	return dl, nil
 }
 
-func (d *DownloadManager) download(startTime, duration time.Duration) (<-chan []byte, error) {
+func (d *Downloader) Stop() {
+	d.once.Do(func() {
+		close(d.done)
+	})
+}
+
+func (d *Downloader) Resume() {
+	d.pause <- wav.Resume
+}
+
+func (d *Downloader) Pause() {
+	d.pause <- wav.Pause
+}
+
+func (d *Downloader) SendOn(ch chan<- []byte) <-chan struct{} {
+	out := make(chan struct{}, 1)
+
+	go func() {
+		defer close(out)
+		for wavB := range d.pb {
+			wavB.wav.Start(ch)
+
+			select {
+			case <-d.done:
+				wavB.wav.Stop()
+				wavB.cleanup()
+
+			case <-wavB.wav.Done:
+				break
+
+			case elem := <-d.pause:
+				wavB.wav.PlayState <- elem
+			}
+		}
+	}()
+
+	return out
+}
+
+func (d *Downloader) schedule() {
+	go func() {
+		defer close(d.pb)
+		for i := 0; ; i++ {
+			clipStart := time.Duration(i)*clipTime + d.Start
+			clipEnd := time.Duration(i+1)*clipTime + d.Start
+
+			if clipStart >= d.End {
+				return
+			}
+
+			dur := clipTime
+			if clipEnd > d.End {
+				dur = d.End - clipStart
+			}
+
+			wavb, err := d.download(clipStart, dur)
+			if err != nil {
+				log.Errorf("error setting up download: %q", err)
+				return
+			}
+
+			d.pb <- wavb
+		}
+	}()
+}
+
+func (d *Downloader) download(startTime, duration time.Duration) (*wavBundle, error) {
 	startSecond := int(startTime.Seconds())
 	args := []string{
 		"-ss", strconv.Itoa(startSecond),
@@ -117,17 +166,11 @@ func (d *DownloadManager) download(startTime, duration time.Duration) (<-chan []
 		return nil, err
 	}
 
-	ch := make(chan []byte, 1024*32)
-	done, err := wav.Load(file.Name(), ch)
+	wv, err := wav.New(file.Name())
 	if err != nil {
 		clearTemp()
 		return nil, err
 	}
 
-	go func() {
-		<-done
-		clearTemp()
-	}()
-
-	return ch, err
+	return &wavBundle{wav: wv, cleanup: clearTemp}, err
 }
