@@ -110,8 +110,12 @@ func (w *Wav) Start(ch chan<- []byte) {
 				select {
 				case <-w.Done:
 					return
+				default:
+				}
+				select {
+				case <-w.Done:
+					return
 				case ch <- b:
-
 				}
 			}
 

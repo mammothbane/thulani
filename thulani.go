@@ -68,12 +68,14 @@ func onGuildCreate(s *discordgo.Session, m *discordgo.GuildCreate) {
 
 	perms := 0
 
+	//log.Debugf("listing roles for %v", m.Name)
 	for _, role := range m.Roles {
+		//log.Debugf("%q (%v)", role.Name, role.ID)
 		for _, mRole := range member.Roles {
 			if role.ID == mRole {
 				perms |= role.Permissions
 
-				log.Infof("discovered role: %v (%v)", role.Name, role.ID)
+				log.Infof("discovered own role: %v (%v)", role.Name, role.ID)
 			}
 		}
 	}
@@ -125,15 +127,20 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	fn, ok := cmdMap[strings.ToLower(ctx.Command)]
 	if ok {
-		authorized := false
+		log.Debugf("message matched a known command: %q", strings.ToLower(ctx.Command))
 
-		for _, role := range ctx.Guild.Roles {
-			for _, v := range ctx.Member.Roles {
-				if v != role.Name {
-					continue
-				}
+		authorized := ctx.Author.ID == config.AdminStr()
 
-				if role.Name == config.OpRole {
+		if !authorized {
+			authorMember, err := ctx.GuildMember(ctx.Guild.ID, ctx.Author.ID)
+			if err != nil {
+				log.Errorf("unable to get guild member for id %q", ctx.Author.Username)
+				ctx.sendMessage("who the fuck are you?", true)
+				return
+			}
+
+			for _, v := range authorMember.Roles {
+				if v == config.OpRoleStr() {
 					authorized = true
 				}
 			}
@@ -145,6 +152,7 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 			return
 		}
 
+		log.Debugf("user was authorized for %q. executing.", strings.ToLower(ctx.Command))
 		fn(ctx)
 		return
 	}

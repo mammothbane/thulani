@@ -62,13 +62,21 @@ func (d *downloader) Stop() {
 	})
 }
 
-func (d *downloader) Start() (<-chan []byte, <-chan struct{}) {
+func (d *downloader) Start() <-chan []byte {
 	out := make(chan []byte, 1024)
-	done := make(chan struct{}, 1)
 
 	go func() {
-		defer close(done)
 		defer close(out)
+		select {
+		case <-d.done:
+			for wavB := range d.pb {
+				wavB.wav.Stop()
+				wavB.cleanup()
+			}
+			return
+		default:
+		}
+
 		for wavB := range d.pb {
 			wavB.wav.Start(out)
 
@@ -78,17 +86,22 @@ func (d *downloader) Start() (<-chan []byte, <-chan struct{}) {
 				wavB.cleanup()
 
 			case <-wavB.wav.Done:
-				break
 			}
 		}
 	}()
 
-	return out, done
+	return out
 }
 
 func (d *downloader) schedule() {
 	defer close(d.pb)
 	for i := 0; ; i++ {
+		select {
+		case <-d.done:
+			return
+		default:
+		}
+
 		clipStart := time.Duration(i)*clipTime + d.StartTime
 		clipEnd := time.Duration(i+1)*clipTime + d.StartTime
 
@@ -107,7 +120,11 @@ func (d *downloader) schedule() {
 			return
 		}
 
-		d.pb <- wavb
+		select {
+		case d.pb <- wavb:
+		case <-d.done:
+			return
+		}
 	}
 }
 

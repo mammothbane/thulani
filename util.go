@@ -31,7 +31,7 @@ type Config struct {
 	Trigger        string `json:"trigger"`
 	QueueSize      uint   `json:"queue_size"`
 	AdminID        uint   `json:"admin_id"`
-	OpRole         string `json:"op_role"`
+	OpRoleID       uint   `json:"op_role_id"`
 	GuildID        uint   `json:"guild_id"`
 	VoiceChannelID uint   `json:"voice_channel_id"`
 	Token          string `json:"token"`
@@ -49,6 +49,10 @@ func (c *Config) VoiceChannelStr() string {
 
 func (c *Config) AdminStr() string {
 	return strconv.Itoa(int(c.AdminID))
+}
+
+func (c *Config) OpRoleStr() string {
+	return strconv.Itoa(int(c.OpRoleID))
 }
 
 func handle(err error) {

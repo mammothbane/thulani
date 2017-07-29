@@ -2,7 +2,7 @@
   "trigger": "bot",
   "queue_size": 5,
   "admin_user_id": 12345,
-  "op_role": "bot-op",
+  "op_role_id": 12345,
   "guild_id": 12345,
   "voice_channel_id": 12345,
   "token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
