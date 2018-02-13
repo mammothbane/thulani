@@ -1,0 +1,11 @@
+[package]
+name = "thulani-rs"
+version = "0.1.0"
+authors = ["Nathan Perry <avaglir@gmail.com>"]
+
+[dependencies]
+
+[dependencies.serenity]
+version = "0.5"
+default-features = false
+features = ["builder", "cache", "client", "framework", "model", "utils", "voice"]
