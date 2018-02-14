@@ -120,14 +120,15 @@ fn main() {
     fern::Dispatch::new()
         .format(move |out, message, record| {
             out.finish(format_args!(
-                "[{}] [{}] {}",
+                "{} [{}] [{}] {}",
+                chrono::Local::now().format("%_m/%_d/%y %l:%M:%S%P"),
                 colors.color(record.level()),
                 record.target(),
                 message
             ))
         })
         .level(log::LevelFilter::Warn)
-        .level_for("thulani_rs", log::LevelFilter::Debug)
+        .level_for("thulani_rs", log::LevelFilter::Trace)
         .level_for("serenity::voice::connection", log::LevelFilter::Error)
         .chain(std::io::stdout())
         .apply()
