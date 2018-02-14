@@ -1,6 +1,11 @@
 use std::env;
+use std::str::FromStr;
 
 use serenity::model::permissions::Permissions;
+use serenity::model::id::GuildId;
+use serenity::model::channel::Message;
+use serenity::client::CACHE;
+
 use url::Url;
 
 lazy_static! {
@@ -25,4 +30,19 @@ lazy_static! {
             REQUIRED_PERMS.bits(), env::var("THULANI_CLIENT_ID").expect("client ID was missing. please specify THULANI_CLIENT_ID in env or .env."),
         )
     ).unwrap();
+}
+
+pub fn must_env_lookup<T: FromStr>(s: &str) -> T {
+    env::var(s).expect(&format!("missing env var {}", s))
+        .parse::<T>().unwrap_or_else(|_| panic!(format!("bad format for {}", s)))
+}
+
+pub trait GuildLookup {
+    fn guild_id(&self) -> Option<GuildId>;
+}
+
+impl GuildLookup for Message {
+    fn guild_id(&self) -> Option<GuildId> {
+        CACHE.read().guild_channel(self.channel_id).map(|c| c.read().guild_id)
+    }
 }
