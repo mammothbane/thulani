@@ -1,10 +1,12 @@
 use std::sync::{Arc, Mutex as SMutex};
 use std::collections::VecDeque;
+use std::thread;
+use std::time::Duration;
 
 use serenity::prelude::*;
 use serenity::client::bridge::voice::ClientVoiceManager;
 use serenity::framework::StandardFramework;
-use serenity::model::channel::GuildChannel;
+use serenity::model::id::ChannelId;
 use serenity::voice::LockedAudio;
 
 use typemap::Key;
@@ -24,16 +26,19 @@ impl VoiceManager {
     }
 }
 
+#[derive(Clone, Debug)]
 struct PlayArgs {
     url: String,
     initiator: String,
 }
 
+#[derive(Clone)]
 struct CurrentItem {
     init_args: PlayArgs,
     audio: Option<LockedAudio>,
 }
 
+#[derive(Clone)]
 pub struct PlayQueue {
     queue: VecDeque<PlayArgs>,
     playing: Option<CurrentItem>,
@@ -53,7 +58,35 @@ impl PlayQueue {
 
     pub fn register(c: &mut Client) {
         let mut data = c.data.lock();
-        data.insert::<PlayQueue>(Arc::new(SMutex::new(PlayQueue::new())));
+        let queue = Arc::new(SMutex::new(PlayQueue::new()));
+
+        data.insert::<PlayQueue>(Arc::clone(&queue));
+        
+        thread::spawn(move || {
+            let queue_lck = Arc::clone(&queue);
+            let sleep = || thread::sleep(Duration::from_millis(250));
+
+            loop {
+                let mut queue = queue_lck.lock().unwrap();
+
+                let allow_continue = queue.playing.clone().map_or(false, |ref x| match x.audio {
+                    Some(ref audio) => !audio.lock().finished,
+                    None => false,
+                });
+
+                if allow_continue || queue.queue.is_empty() {
+                    sleep();
+                    continue;
+                }
+
+                queue.advance();
+
+                // start the music
+
+
+                sleep();
+            }
+        });
     }
 
     fn advance(&mut self) {
@@ -66,7 +99,7 @@ impl PlayQueue {
     }
 }
 
-fn send(channel: &GuildChannel, text: &str, tts: bool) -> Result<()> {
+fn send(channel: ChannelId, text: &str, tts: bool) -> Result<()> {
     channel.send_message(|m| m.content(text).tts(tts))?;
     Ok(())
 }
@@ -81,33 +114,42 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
     .cmd("meme", meme)
     .cmd("mute", mute)
     .cmd("unmute", unmute)
+    .cmd("play", play)
 }
 
-command!(skip(ctx, _msg) {
-    let data = ctx.data.lock();
+command!(play(ctx, msg, args) {
+    let url = match args.single::<String>() {
+        Ok(url) => url,
+        Err(_) => {
+            send(msg.channel_id, "BAD LINK", msg.tts)?;
+            return Ok(());
+        }
+    };
 
-    let mut mgr_lock = data.get::<VoiceManager>().cloned().unwrap();
-    let mut manager = mgr_lock.lock();
-    
-    let mut queue_lock = data.get::<PlayQueue>().cloned().unwrap();
+    if !url.starts_with("http") {
+        send(msg.channel_id, "bAD LiNk", msg.tts)?;
+        return Ok(());
+    }
+
+    if url.contains("imgur") {
+        send(msg.channel_id, "IMGUR IS BAD, YOU TRASH CAN MAN", msg.tts)?;
+        return Ok(());
+    }
+
+    let mut queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
     let mut play_queue = queue_lock.lock().unwrap();
 
-    if let Some(handler) = manager.get_mut(*TARGET_GUILD_ID) {
-        handler.stop();
-        play_queue.advance();
-    } else {
-        debug!("got skip with no handler attached");
-    }
+    play_queue.queue.push_back(PlayArgs{
+        initiator: msg.author.name.clone(),
+        url,
+    });
 });
 
 command!(pause(ctx, msg) {
     let mut queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
     let mut play_queue = queue_lock.lock().unwrap();
 
-    let channel_tmp = msg.channel().unwrap().guild().unwrap();
-    let channel = channel_tmp.read();
-
-    let done = || send(&channel, "r u srs", msg.tts);
+    let done = || send(msg.channel_id, "r u srs", msg.tts);
 
     let current_item = match play_queue.playing {
         Some(ref x) => x,
@@ -139,10 +181,7 @@ command!(resume(ctx, msg) {
     let mut queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
     let mut play_queue = queue_lock.lock().unwrap();
 
-    let channel_tmp = msg.channel().unwrap().guild().unwrap();
-    let channel = channel_tmp.read();
-
-    let done = || send(&channel, "r u srs", msg.tts);
+    let done = || send(msg.channel_id, "r u srs", msg.tts);
 
     let current_item = match play_queue.playing {
         Some(ref x) => x,
@@ -170,6 +209,23 @@ command!(resume(ctx, msg) {
     audio.play();
 });
 
+command!(skip(ctx, _msg) {
+    let data = ctx.data.lock();
+
+    let mut mgr_lock = data.get::<VoiceManager>().cloned().unwrap();
+    let mut manager = mgr_lock.lock();
+    
+    let mut queue_lock = data.get::<PlayQueue>().cloned().unwrap();
+    let mut play_queue = queue_lock.lock().unwrap();
+
+    if let Some(handler) = manager.get_mut(*TARGET_GUILD_ID) {
+        handler.stop();
+        play_queue.advance();
+    } else {
+        debug!("got skip with no handler attached");
+    }
+});
+
 command!(die(ctx, msg) {
     let data = ctx.data.lock();
 
@@ -179,16 +235,13 @@ command!(die(ctx, msg) {
     let mut queue_lock = data.get::<PlayQueue>().cloned().unwrap();
     let mut play_queue = queue_lock.lock().unwrap();
 
-    let channel_tmp = msg.channel().unwrap().guild().unwrap();
-    let channel = channel_tmp.read();
-
     play_queue.playing = None;
     play_queue.queue.clear();
 
     if let Some(handler) = manager.get_mut(*TARGET_GUILD_ID) {
         handler.stop();
     } else {
-        send(&channel, "YOU die", msg.tts)?;
+        send(msg.channel_id, "YOU die", msg.tts)?;
         debug!("got die with no handler attached");
     }
 });
@@ -202,11 +255,11 @@ command!(list(ctx, msg) {
 
     match play_queue.playing {
         Some(ref info) => {
-            send(&channel, &format!("Currently playing {} ({})", info.init_args.url, info.init_args.initiator), msg.tts)?;
+            send(msg.channel_id, &format!("Currently playing {} ({})", info.init_args.url, info.init_args.initiator), msg.tts)?;
         },
         None => {
             debug!("`list` called with no items in queue");
-            send(&channel, "Nothing is playing you fucking meme", msg.tts)?;
+            send(msg.channel_id, "Nothing is playing you fucking meme", msg.tts)?;
             return Ok(());
         },
     }
@@ -216,8 +269,8 @@ command!(list(ctx, msg) {
     });
 });
 
-command!(meme(_ctx, _msg) {
-
+command!(meme(_ctx, msg) {
+    send(msg.channel_id, "I am not yet capable of memeing", msg.tts)?;
 });
 
 command!(mute(ctx, _msg) {
