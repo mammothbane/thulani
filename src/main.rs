@@ -1,5 +1,3 @@
-#![feature(rustc_private)]
-
 #[macro_use] extern crate serenity;
 #[macro_use] extern crate log;
 #[macro_use] extern crate error_chain;
@@ -9,7 +7,6 @@ extern crate dotenv;
 extern crate simple_logger;
 extern crate typemap;
 extern crate url;
-extern crate parking_lot;
 
 mod commands;
 mod util;
