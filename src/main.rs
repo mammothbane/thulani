@@ -80,10 +80,11 @@ fn run() -> Result<()> {
         })
         .after(|_ctx, _msg, _cmd, err| {
             match err {
-                Ok(()) => {},
-                Err(_e) => {
-
-
+                Ok(()) => {
+                    trace!("command completed successfully");
+                },
+                Err(e) => {
+                    error!("encountered error: {:?}", e);
                 }
             }
         })
