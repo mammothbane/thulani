@@ -7,11 +7,11 @@ use serenity::prelude::*;
 use serenity::client::bridge::voice::ClientVoiceManager;
 use serenity::framework::StandardFramework;
 use serenity::model::id::ChannelId;
-use serenity::voice::LockedAudio;
+use serenity::voice::{LockedAudio, ytdl};
 
 use typemap::Key;
 
-use {Result, TARGET_GUILD_ID};
+use {Result, TARGET_GUILD_ID, must_env_lookup};
 
 pub struct VoiceManager;
 
@@ -35,7 +35,7 @@ struct PlayArgs {
 #[derive(Clone)]
 struct CurrentItem {
     init_args: PlayArgs,
-    audio: Option<LockedAudio>,
+    audio: LockedAudio,
 }
 
 #[derive(Clone)]
@@ -57,6 +57,8 @@ impl PlayQueue {
     }
 
     pub fn register(c: &mut Client) {
+        let voice_manager = Arc::clone(&c.voice_manager);
+
         let mut data = c.data.lock();
         let queue = Arc::new(SMutex::new(PlayQueue::new()));
 
@@ -65,36 +67,51 @@ impl PlayQueue {
         thread::spawn(move || {
             let queue_lck = Arc::clone(&queue);
             let sleep = || thread::sleep(Duration::from_millis(250));
+            let voice_manager = voice_manager;
+
+            let channel = ChannelId(must_env_lookup("DEFAULT_CHANNEL"));
 
             loop {
                 let mut queue = queue_lck.lock().unwrap();
 
-                let allow_continue = queue.playing.clone().map_or(false, |ref x| match x.audio {
-                    Some(ref audio) => !audio.lock().finished,
-                    None => false,
-                });
+                let allow_continue = queue.playing.clone().map_or(false, |x| !x.audio.lock().finished);
 
                 if allow_continue || queue.queue.is_empty() {
                     sleep();
                     continue;
                 }
 
-                queue.advance();
+                let item = queue.queue.pop_front().unwrap();
+                let src = match ytdl(&item.url) {
+                    Ok(src) => src,
+                    Err(e) => {
+                        error!("bad link: {}; {}", &item.url, e);
+                        let _ = send(channel, &format!("what the fuck, {}? what was that link?", &item.initiator), false);
+                        sleep();
+                        continue;
+                    }
+                };
 
-                // start the music
+                let mut manager = voice_manager.lock();
 
+                let handler = manager.join(*TARGET_GUILD_ID, must_env_lookup::<u64>("VOICE_CHANNEL"));
+
+                match handler {
+                    Some(handler) => {
+                        let audio = handler.play_only(src);
+                        queue.playing = Some(CurrentItem {
+                            init_args: item,
+                            audio,  
+                        });
+                    },
+                    None => {
+                        error!("couldn't join channel");
+                        let _ = send(channel, "something happened somewhere somehow.", false);
+                    }
+                }
 
                 sleep();
             }
-        });
-    }
-
-    fn advance(&mut self) {
-        self.queue.pop_front().map(|info| {
-            self.playing = Some(CurrentItem {
-                init_args: info,
-                audio: None,
-            });
         });
     }
 }
@@ -159,15 +176,7 @@ command!(pause(ctx, msg) {
         },
     };
 
-    let locked_audio = match current_item.audio {
-        Some(ref x) => x,
-        None => {
-            done()?;
-            return Ok(());
-        },
-    };
-
-    let mut audio = locked_audio.lock();
+    let mut audio = current_item.audio.lock();
 
     if !audio.playing {
         done()?;
@@ -191,15 +200,7 @@ command!(resume(ctx, msg) {
         },
     };
 
-    let locked_audio = match current_item.audio {
-        Some(ref x) => x,
-        None => {
-            done()?;
-            return Ok(());
-        },
-    };
-
-    let mut audio = locked_audio.lock();
+    let mut audio = current_item.audio.lock();
 
     if audio.playing {
         done()?;
@@ -220,7 +221,7 @@ command!(skip(ctx, _msg) {
 
     if let Some(handler) = manager.get_mut(*TARGET_GUILD_ID) {
         handler.stop();
-        play_queue.advance();
+        play_queue.playing = None;
     } else {
         debug!("got skip with no handler attached");
     }
