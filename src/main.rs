@@ -4,9 +4,10 @@
 #[macro_use] extern crate lazy_static;
 
 extern crate dotenv;
-extern crate simple_logger;
+extern crate fern;
 extern crate typemap;
 extern crate url;
+extern crate chrono;
 
 mod commands;
 mod util;
@@ -107,7 +108,28 @@ fn main() {
     const MIN_RUN_DURATION: Duration = Duration::from_secs(120);
 
     dotenv().ok();
-    simple_logger::init_with_level(log::Level::Debug).unwrap();
+
+    use fern::colors::{Color, ColoredLevelConfig};
+    let colors = ColoredLevelConfig::new()
+        .info(Color::Green)
+        .debug(Color::BrightBlue)
+        .trace(Color::BrightMagenta);
+
+    fern::Dispatch::new()
+        .format(move |out, message, record| {
+            out.finish(format_args!(
+                "[{}] [{}] {}",
+                colors.color(record.level()),
+                record.target(),
+                message
+            ))
+        })
+        .level(log::LevelFilter::Warn)
+        .level_for("thulani_rs", log::LevelFilter::Debug)
+        .level_for("serenity::voice::connection", log::LevelFilter::Error)
+        .chain(std::io::stdout())
+        .apply()
+        .expect("error initializing logging");
 
     let mut backoff_count: usize = 0;
 
@@ -143,7 +165,7 @@ fn main() {
             panic!("restarted bot too many times");
         }
 
-        let backoff_millis = (BACKOFF_INIT*BACKOFF_FACTOR.powi(backoff_count as i32)) as u64;
+        let backoff_millis = (BACKOFF_INIT * BACKOFF_FACTOR.powi(backoff_count as i32)) as u64;
         info!("bot died too quickly. backing off, retrying in {}ms.", backoff_millis);
 
         thread::sleep(Duration::from_millis(backoff_millis));

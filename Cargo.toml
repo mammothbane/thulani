@@ -7,10 +7,13 @@ authors = ["Nathan Perry <avaglir@gmail.com>"]
 lazy_static = "1.0"
 error-chain = "0.11.0"
 log = "0.4"
-simple_logger = "0.5.0"
 typemap = "0.3.3"
 url = "1.6.0"
 dotenv = "0.10.1"
+chrono = "0.4"
+
+fern = { version = "0.5", features = ["colored"] }
+
 
 [dependencies.serenity]
 version = "0.5"
