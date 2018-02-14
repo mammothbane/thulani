@@ -1,7 +1,7 @@
 #[macro_use] extern crate serenity;
 #[macro_use] extern crate log;
 #[macro_use] extern crate error_chain;
-#[macro_use] extern crate dotenv_codegen;
+#[macro_use] extern crate lazy_static;
 
 extern crate dotenv;
 extern crate simple_logger;
@@ -12,7 +12,12 @@ mod commands;
 mod util;
 
 mod errors {
-    error_chain!();
+    error_chain! {
+        foreign_links {
+            Serenity(::serenity::Error);
+            OS(::std::env::VarError);
+        }
+    }
 }
 
 use errors::*;
@@ -34,16 +39,18 @@ use dotenv::dotenv;
 struct Handler;
 impl EventHandler for Handler {
     fn ready(&self, _c: Context, r: Ready) {
-        r.guilds.iter().find(|g| {
+        let guild = r.guilds.iter().find(|g| {
             g.id().0 == 0
-        }).or_else(|| {
-            info!("bot isn't in configured guild. let it join here: {}", OAUTH_URL);
         });
+
+        if guild.is_none() {
+            info!("bot isn't in configured guild. let it join here: {:?}", OAUTH_URL.as_str());
+        }
     }
 }
 
 fn run() -> Result<()> {
-    let token = &env::var("DISCORD_TOKEN")?;
+    let token = &env::var("THULANI_TOKEN")?;
     let mut client = Client::new(token, Handler)?;
     let framework = StandardFramework::new()
         .configure(|c| c
@@ -88,7 +95,7 @@ fn main() {
     const MIN_RUN_DURATION: Duration = Duration::from_secs(120);
 
     dotenv().ok();
-    simple_logger::init().unwrap();
+    simple_logger::init_with_level(log::Level::Debug).unwrap();
 
     let mut backoff_count: usize = 0;
 
@@ -115,7 +122,7 @@ fn main() {
         }
 
         backoff_count += 1;
-        if backoff_count >= 3 {
+        if backoff_count >= MAX_BACKOFFS {
             panic!("restarted bot too many times");
         }
 
