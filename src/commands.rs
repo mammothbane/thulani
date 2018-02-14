@@ -30,6 +30,7 @@ impl VoiceManager {
 struct PlayArgs {
     url: String,
     initiator: String,
+    sender_channel: ChannelId,
 }
 
 #[derive(Clone)]
@@ -69,8 +70,6 @@ impl PlayQueue {
             let sleep = || thread::sleep(Duration::from_millis(250));
             let voice_manager = voice_manager;
 
-            let channel = ChannelId(must_env_lookup("DEFAULT_CHANNEL"));
-
             loop {
                 let mut queue = queue_lck.lock().unwrap();
 
@@ -102,8 +101,8 @@ impl PlayQueue {
                 let src = match ytdl(&item.url) {
                     Ok(src) => src,
                     Err(e) => {
-                        error!("bad link: {}; {}", &item.url, e);
-                        let _ = send(channel, &format!("what the fuck"), false);
+                        error!("bad link: {}; {:?}", &item.url, e);
+                        let _ = send(item.sender_channel, &format!("what the fuck"), false);
                         sleep();
                         continue;
                     }
@@ -125,7 +124,7 @@ impl PlayQueue {
                     },
                     None => {
                         error!("couldn't join channel");
-                        let _ = send(channel, "something happened somewhere somehow.", false);
+                        let _ = send(item.sender_channel, "something happened somewhere somehow.", false);
                     }
                 }
 
@@ -206,6 +205,7 @@ command!(play(ctx, msg, args) {
     play_queue.queue.push_back(PlayArgs{
         initiator: msg.author.name.clone(),
         url,
+        sender_channel: msg.channel_id,
     });
 });
 
