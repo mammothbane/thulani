@@ -102,7 +102,7 @@ impl PlayQueue {
                     Ok(src) => src,
                     Err(e) => {
                         error!("bad link: {}; {}", &item.url, e);
-                        let _ = send(channel, &format!("what the fuck, {}? what was that link?", &item.initiator), false);
+                        let _ = send(channel, &format!("what the fuck"), false);
                         sleep();
                         continue;
                     }
@@ -304,7 +304,7 @@ command!(list(ctx, msg) {
         },
         None => {
             debug!("`list` called with no items in queue");
-            send(msg.channel_id, "Nothing is playing you goddamn meme", msg.tts)?;
+            send(msg.channel_id, "Nothing is playing you meme", msg.tts)?;
             return Ok(());
         },
     }
