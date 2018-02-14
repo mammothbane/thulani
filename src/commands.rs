@@ -98,6 +98,9 @@ impl PlayQueue {
                 }
 
                 let item = queue.queue.pop_front().unwrap();
+
+                trace!("checking ytdl for: {}", item.url);
+
                 let src = match ytdl(&item.url) {
                     Ok(src) => src,
                     Err(e) => {
