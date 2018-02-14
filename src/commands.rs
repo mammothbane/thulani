@@ -76,7 +76,23 @@ impl PlayQueue {
 
                 let allow_continue = queue.playing.clone().map_or(false, |x| !x.audio.lock().finished);
 
-                if allow_continue || queue.queue.is_empty() {
+                if allow_continue {
+                    sleep();
+                    continue;
+                }
+
+                if queue.queue.is_empty() {
+                    if queue.playing.is_some() { // must be finished
+                        assert!({
+                            let audio_lck = queue.playing.clone().unwrap().audio;
+                            let audio = audio_lck.lock();
+                            audio.finished
+                        });
+
+                        let mut manager = voice_manager.lock();
+                        manager.leave(*TARGET_GUILD_ID);
+                    }
+
                     sleep();
                     continue;
                 }
@@ -93,7 +109,6 @@ impl PlayQueue {
                 };
 
                 let mut manager = voice_manager.lock();
-
                 let handler = manager.join(*TARGET_GUILD_ID, must_env_lookup::<u64>("VOICE_CHANNEL"));
 
                 match handler {
@@ -269,6 +284,7 @@ command!(die(ctx, msg) {
 
     if let Some(handler) = manager.get_mut(*TARGET_GUILD_ID) {
         handler.stop();
+        handler.leave();
     } else {
         send(msg.channel_id, "YOU die", msg.tts)?;
         debug!("got die with no handler attached");
