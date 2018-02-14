@@ -123,15 +123,43 @@ fn send(channel: ChannelId, text: &str, tts: bool) -> Result<()> {
 
 pub fn register_commands(f: StandardFramework) -> StandardFramework {
    f
-    .cmd("skip", skip)
-    .cmd("pause", pause)
-    .cmd("resume", resume)
-    .cmd("list", list)
-    .cmd("die", die)
-    .cmd("meme", meme)
-    .cmd("mute", mute)
-    .cmd("unmute", unmute)
-    .cmd("play", play)
+    .command("skip", |c| c
+        .desc("skip the rest of the current request")
+        .guild_only(true)
+        .cmd(skip))
+    .command("pause", |c| c
+        .desc("pause playback (currently broken)")
+        .guild_only(true)
+        .cmd(pause))
+    .command("resume", |c| c
+        .desc("resume playing (currently broken)")
+        .guild_only(true)
+        .cmd(resume))
+    .command("list", |c| c
+        .known_as("queue")
+        .desc("list playing and queued requests")
+        .guild_only(true)
+        .cmd(list))
+    .command("die", |c| c
+        .known_as("sudoku")
+        .desc("stop playing and empty the queue")
+        .guild_only(true)
+        .cmd(die))
+    .command("meme", |c| c
+        .guild_only(true)
+        .cmd(meme))
+    .command("mute", |c| c
+        .desc("mute thulani (playback continues)")
+        .guild_only(true)
+        .cmd(mute))
+    .command("unmute", |c| c
+        .desc("unmute thulani")
+        .guild_only(true)
+        .cmd(unmute))
+    .command("play", |c| c
+        .desc("queue a request")
+        .guild_only(true)
+        .cmd(play))
 }
 
 command!(play(ctx, msg, args) {
@@ -260,7 +288,7 @@ command!(list(ctx, msg) {
         },
         None => {
             debug!("`list` called with no items in queue");
-            send(msg.channel_id, "Nothing is playing you fucking meme", msg.tts)?;
+            send(msg.channel_id, "Nothing is playing you goddamn meme", msg.tts)?;
             return Ok(());
         },
     }
@@ -289,7 +317,7 @@ command!(mute(ctx, _msg) {
         });
 });
 
-command!(unmute(ctx, _msg) {
+command!(unmute(ctx, msg) {
     let mut mgr_lock = ctx.data.lock().get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 
@@ -300,6 +328,7 @@ command!(unmute(ctx, _msg) {
             } else {
                 handler.mute(false);
                 trace!("Unmuted");
+                let _ = send(msg.channel_id, "REEEEEEEEEEEEEE", msg.tts);
             }
         });
 });

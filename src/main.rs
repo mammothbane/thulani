@@ -89,7 +89,7 @@ fn run() -> Result<()> {
                 }
             }
         })
-        .bucket("std", 1, 10, 3)
+        .bucket("Standard", 1, 10, 3)
         .customised_help(help_commands::with_embeds, |c| {
             c
         });
