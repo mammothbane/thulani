@@ -74,9 +74,10 @@ fn run() -> Result<()> {
             .case_insensitivity(true)
         )
         .before(|_ctx, message, cmd| {
-            debug!("got command {} from user '{}' ({})", cmd, message.author.name, message.author.id);
-            
-            message.guild_id().map_or(false, |x| x.0 == *TARGET_GUILD)
+            let result = message.guild_id().map_or(false, |x| x.0 == *TARGET_GUILD);
+            debug!("got command {} from user '{}' ({}). accept: {}", cmd, message.author.name, message.author.id, result);
+
+            result          
         })
         .after(|_ctx, _msg, _cmd, err| {
             match err {

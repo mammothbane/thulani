@@ -91,6 +91,7 @@ impl PlayQueue {
 
                         let mut manager = voice_manager.lock();
                         manager.leave(*TARGET_GUILD_ID);
+                        debug!("disconnected due to inactivity");
                     }
 
                     sleep();
@@ -108,6 +109,8 @@ impl PlayQueue {
                     }
                 };
 
+                trace!("got ytdl item for {}", item.url);
+
                 let mut manager = voice_manager.lock();
                 let handler = manager.join(*TARGET_GUILD_ID, must_env_lookup::<u64>("VOICE_CHANNEL"));
 
@@ -118,6 +121,7 @@ impl PlayQueue {
                             init_args: item,
                             audio,  
                         });
+                        debug!("playing new song");
                     },
                     None => {
                         error!("couldn't join channel");
