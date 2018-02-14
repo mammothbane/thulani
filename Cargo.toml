@@ -4,8 +4,17 @@ version = "0.1.0"
 authors = ["Nathan Perry <avaglir@gmail.com>"]
 
 [dependencies]
+lazy_static = "1.0"
+#failure = "0.1.1"
+error-chain = "0.11.0"
+log = "0.4"
+simple_logger = "0.5.0"
+typemap = "0.3.3"
+url = "1.6.0"
+dotenv = "0.10.1"
+dotenv_codegen = "0.11.0"
 
 [dependencies.serenity]
 version = "0.5"
 default-features = false
-features = ["builder", "cache", "client", "framework", "model", "utils", "voice"]
+features = ["builder", "cache", "client", "framework", "model", "utils", "voice", "standard_framework"]
