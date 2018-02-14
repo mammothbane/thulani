@@ -256,7 +256,7 @@ command!(list(ctx, msg) {
 
     match play_queue.playing {
         Some(ref info) => {
-            send(msg.channel_id, &format!("Currently playing {} ({})", info.init_args.url, info.init_args.initiator), msg.tts)?;
+            send(msg.channel_id, &format!("Currently playing `{}` ({})", info.init_args.url, info.init_args.initiator), msg.tts)?;
         },
         None => {
             debug!("`list` called with no items in queue");
@@ -266,7 +266,7 @@ command!(list(ctx, msg) {
     }
 
     play_queue.queue.iter().for_each(|info| {
-        channel.say(&format!("{} ({})", info.url, info.initiator)).unwrap(); 
+        channel.say(&format!("`{}` ({})", info.url, info.initiator)).unwrap(); 
     });
 });
 
