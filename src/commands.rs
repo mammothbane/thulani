@@ -67,7 +67,11 @@ impl PlayQueue {
         
         thread::spawn(move || {
             let queue_lck = Arc::clone(&queue);
-            let sleep = || thread::sleep(Duration::from_millis(250));
+            let sleep = || {
+                trace!("poll thread sleep");
+                thread::sleep(Duration::from_millis(250));
+                trace!("poll thread awake");
+            };
             let voice_manager = voice_manager;
 
             loop {
