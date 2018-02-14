@@ -127,10 +127,17 @@ fn main() {
                 message
             ))
         })
-        .level(log::LevelFilter::Warn)
-        .level_for("thulani_rs", log::LevelFilter::Trace)
         .level_for("serenity::voice::connection", log::LevelFilter::Error)
-        .chain(std::io::stdout())
+        .chain(fern::Dispatch::new()
+            .level(log::LevelFilter::Warn)
+            .level_for("thulani", log::LevelFilter::Debug)
+            .chain(std::io::stdout())
+        )
+        .chain(fern::Dispatch::new()
+            .level(log::LevelFilter::Info)
+            .level_for("thulani", log::LevelFilter::Trace)
+            .chain(fern::log_file("thulani.log").expect("problem creating log file"))
+        )
         .apply()
         .expect("error initializing logging");
 

@@ -1,5 +1,5 @@
 [package]
-name = "thulani-rs"
+name = "thulani"
 version = "0.1.0"
 authors = ["Nathan Perry <avaglir@gmail.com>"]
 
@@ -11,9 +11,7 @@ typemap = "0.3.3"
 url = "1.6.0"
 dotenv = "0.10.1"
 chrono = "0.4"
-
 fern = { version = "0.5", features = ["colored"] }
-
 
 [dependencies.serenity]
 version = "0.5"
