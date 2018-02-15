@@ -165,12 +165,13 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
         .guild_only(true)
         .cmd(list))
     .command("die", |c| c
-        .known_as("sudoku")
+        .batch_known_as(vec!["sudoku", "stop"])
         .desc("stop playing and empty the queue")
         .guild_only(true)
         .cmd(die))
     .command("meme", |c| c
         .guild_only(true)
+        .help_available(false)
         .cmd(meme))
     .command("mute", |c| c
         .desc("mute thulani (playback continues)")

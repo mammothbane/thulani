@@ -2,12 +2,20 @@
 #[macro_use] extern crate log;
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate lazy_static;
+#[macro_use] extern crate cfg_if;
 
 extern crate dotenv;
 extern crate fern;
 extern crate typemap;
 extern crate url;
 extern crate chrono;
+
+cfg_if! {
+    if #[cfg(feature = "diesel")] {
+        #[macro_use] extern crate diesel;
+        mod db;
+    }
+}
 
 mod commands;
 mod util;
@@ -31,6 +39,8 @@ mod errors {
         foreign_links {
             Serenity(::serenity::Error);
             MissingVar(::std::env::VarError);
+            DieselConn(::diesel::ConnectionError) #[cfg(feature = "diesel")];
+            Diesel(::diesel::result::Error) #[cfg(feature = "diesel")]; 
         }
     }
 }
