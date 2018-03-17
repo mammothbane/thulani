@@ -23,7 +23,7 @@ lazy_static! {
     pub static ref OAUTH_URL: Url = Url::parse(
         &format!(
             "https://discordapp.com/api/oauth2/authorize?scope=bot&permissions={}&client_id={}",
-            REQUIRED_PERMS.bits(), env::var("THULANI_CLIENT_ID").expect("client ID was missing. please specify THULANI_CLIENT_ID in env or .env."),
+            REQUIRED_PERMS.bits(), dotenv!("THULANI_CLIENT_ID"),
         )
     ).unwrap();
 }

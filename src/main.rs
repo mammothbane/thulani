@@ -3,6 +3,7 @@
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate cfg_if;
+#[macro_use] extern crate dotenv_codegen;
 
 extern crate dotenv;
 extern crate fern;
@@ -49,9 +50,10 @@ use errors::*;
 pub use util::*;
 
 lazy_static! {
-    static ref TARGET_GUILD: u64 = must_env_lookup::<u64>("TARGET_GUILD");
+    static ref TARGET_GUILD: u64 = dotenv!("TARGET_GUILD").parse().expect("unable to parse TARGET_GUILD as u64");
     static ref TARGET_GUILD_ID: GuildId = GuildId(*TARGET_GUILD);
 }
+
 
 struct Handler;
 impl EventHandler for Handler {
