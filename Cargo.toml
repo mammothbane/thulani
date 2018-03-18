@@ -20,6 +20,8 @@ diesel = { version = "1.0.0", features = ["postgres"], optional = true }
 cfg-if = "0.1"
 
 [dependencies.serenity]
-version = "0.5"
+# version = "~0.5"
 default-features = false
 features = ["builder", "cache", "client", "framework", "model", "utils", "voice", "standard_framework"]
+git = "https://github.com/zeyla/serenity"
+rev = "b71d99"

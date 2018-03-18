@@ -87,7 +87,7 @@ fn run() -> Result<()> {
         )
         .before(|_ctx, message, cmd| {
             let result = message.guild_id().map_or(false, |x| x.0 == *TARGET_GUILD);
-            debug!("got command {} from user '{}' ({}). accept: {}", cmd, message.author.name, message.author.id, result);
+            debug!("got command '{}' from user '{}' ({}). accept: {}", cmd, message.author.name, message.author.id, result);
 
             result          
         })

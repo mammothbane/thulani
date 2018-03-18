@@ -8,6 +8,7 @@ use serenity::client::bridge::voice::ClientVoiceManager;
 use serenity::framework::StandardFramework;
 use serenity::model::id::ChannelId;
 use serenity::voice::{LockedAudio, ytdl};
+use serenity::model::channel::Message;
 
 use typemap::Key;
 
@@ -185,17 +186,22 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
         .desc("queue a request")
         .guild_only(true)
         .cmd(play))
+    .unrecognised_command(|ctx, msg, unrec| {
+        let url = match msg.content.split_whitespace().skip(1).next() {
+            Some(x) => x,
+            None => {
+                info!("received unrecognized command: {}", unrec);
+                let _ = send(msg.channel_id, "format your commands right. fuck you.", msg.tts);
+                return;
+            }
+        };
+
+        let _ = _play(ctx, msg, &url);
+     })
 }
 
-command!(play(ctx, msg, args) {
-    let url = match args.single::<String>() {
-        Ok(url) => url,
-        Err(_) => {
-            send(msg.channel_id, "BAD LINK", msg.tts)?;
-            return Ok(());
-        }
-    };
-
+fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
+    debug!("playing '{}'", url);
     if !url.starts_with("http") {
         send(msg.channel_id, "bAD LiNk", msg.tts)?;
         return Ok(());
@@ -208,16 +214,30 @@ command!(play(ctx, msg, args) {
 
     trace!("acquiring queue lock");
 
-    let mut queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+    let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
     let mut play_queue = queue_lock.write().unwrap();
 
     trace!("queue lock acquired");
 
     play_queue.queue.push_back(PlayArgs{
         initiator: msg.author.name.clone(),
-        url,
+        url: url.to_owned(),
         sender_channel: msg.channel_id,
     });
+
+    Ok(())
+}
+
+command!(play(ctx, msg, args) {
+    let url = match args.single::<String>() {
+        Ok(url) => url,
+        Err(_) => {
+            send(msg.channel_id, "BAD LINK", msg.tts)?;
+            return Ok(());
+        }
+    };
+
+    _play(ctx, msg, &url)?;
 });
 
 command!(pause(ctx, msg) {
