@@ -1,20 +1,19 @@
-use std::sync::{Arc, RwLock};
-use std::collections::VecDeque;
-use std::thread;
-use std::time::Duration;
-
-use serenity::prelude::*;
+use {must_env_lookup, Result, TARGET_GUILD_ID};
 use serenity::client::bridge::voice::ClientVoiceManager;
 use serenity::framework::StandardFramework;
-use serenity::model::id::ChannelId;
-use serenity::voice::{LockedAudio, ytdl};
 use serenity::model::channel::Message;
-
+use serenity::model::id::ChannelId;
+use serenity::prelude::*;
+use serenity::voice::{LockedAudio, ytdl};
+use std::collections::VecDeque;
+use std::sync::{Arc, RwLock};
+use std::thread;
+use std::time::Duration;
 use typemap::Key;
 
-use {Result, TARGET_GUILD_ID, must_env_lookup};
-
 pub struct VoiceManager;
+
+const DEFAULT_VOLUME: f32 = 0.05;
 
 impl Key for VoiceManager {
     type Value = Arc<Mutex<ClientVoiceManager>>;
@@ -44,6 +43,7 @@ struct CurrentItem {
 pub struct PlayQueue {
     queue: VecDeque<PlayArgs>,
     playing: Option<CurrentItem>,
+    volume: f32,
 }
 
 impl Key for PlayQueue {
@@ -55,6 +55,7 @@ impl PlayQueue {
         PlayQueue {
             queue: VecDeque::new(),
             playing: None,
+            volume: DEFAULT_VOLUME,
         }
     }
 
@@ -124,11 +125,16 @@ impl PlayQueue {
 
                 match handler {
                     Some(handler) => {
-                        let audio = handler.play_only(src);
+                        let mut audio = handler.play_only(src);
+                        {
+                            audio.lock().volume(queue.volume);
+                        }
+
                         queue.playing = Some(CurrentItem {
                             init_args: item,
                             audio,  
                         });
+
                         debug!("playing new song");
                     },
                     None => {
@@ -186,6 +192,10 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
         .desc("queue a request")
         .guild_only(true)
         .cmd(play))
+    .command("volume", |c| c
+        .desc("set playback volume")
+        .guild_only(true)
+        .cmd(volume))
     .unrecognised_command(|ctx, msg, unrec| {
         let url = match msg.content.split_whitespace().skip(1).next() {
             Some(x) => x,
@@ -229,6 +239,11 @@ fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
 }
 
 command!(play(ctx, msg, args) {
+    if args.len() == 0 {
+        _resume(ctx, msg)?;
+        return Ok(());
+    }
+
     let url = match args.single::<String>() {
         Ok(url) => url,
         Err(_) => {
@@ -272,7 +287,11 @@ command!(pause(ctx, msg) {
 });
 
 command!(resume(ctx, msg) {
-    let mut queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+    _resume(ctx, msg)?;
+});
+
+fn _resume(ctx: &mut Context, msg: &Message) -> Result<()> {
+    let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
 
     let done = || send(msg.channel_id, "r u srs", msg.tts);
     let playing = {
@@ -300,7 +319,9 @@ command!(resume(ctx, msg) {
         let ref audio = queue.playing.clone().unwrap().audio;
         audio.lock().play();
     }
-});
+
+    Ok(())
+}
 
 command!(skip(ctx, _msg) {
     let data = ctx.data.lock();
@@ -401,4 +422,58 @@ command!(unmute(ctx, msg) {
                 let _ = send(msg.channel_id, "REEEEEEEEEEEEEE", msg.tts);
             }
         });
+});
+
+command!(volume(ctx, msg, args) {
+    if args.len() == 0 {
+        let vol = {
+            let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+            let mut play_queue = queue_lock.read().unwrap();
+            (play_queue.volume / DEFAULT_VOLUME * 100.0) as usize
+        };
+
+        send(msg.channel_id, &format!("Volume: {}/100", vol), msg.tts)?;
+        return Ok(());
+    }
+
+    let mut vol: usize = match args.single::<f32>() {
+        Ok(vol) if vol.is_nan() => {
+            send(msg.channel_id, "you're a fuck", msg.tts)?;
+            return Ok(());
+        },
+        Ok(vol) => vol as usize,
+        Err(_) => {
+            send(msg.channel_id, "???????", msg.tts)?;
+            return Ok(());
+        },
+    };
+
+    let mut vol: f32 = (vol as f32)/100.0;  // force aliasing to reasonable values
+
+    if vol > 3.0 {
+        vol = 3.0;
+    }
+
+    if vol < 0.0 {
+        vol = 0.0;
+    }
+
+    let mut queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+
+    {
+        let mut play_queue = queue_lock.write().unwrap();
+        play_queue.volume = vol * DEFAULT_VOLUME;
+    }
+
+    {
+        let play_queue = queue_lock.read().unwrap();
+
+        let current_item = match play_queue.playing {
+            Some(ref x) => x,
+            None => return Ok(()),
+        };
+
+        let mut audio = current_item.audio.lock();
+        audio.volume(play_queue.volume);
+    };
 });
