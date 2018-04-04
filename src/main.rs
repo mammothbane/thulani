@@ -1,16 +1,28 @@
-#[macro_use] extern crate serenity;
-#[macro_use] extern crate log;
-#[macro_use] extern crate error_chain;
-#[macro_use] extern crate lazy_static;
 #[macro_use] extern crate cfg_if;
-#[macro_use] extern crate dotenv_codegen;
-
+extern crate chrono;
+extern crate ctrlc;
 extern crate dotenv;
+#[macro_use] extern crate dotenv_codegen;
+#[macro_use] extern crate error_chain;
 extern crate fern;
+#[macro_use] extern crate lazy_static;
+#[macro_use] extern crate log;
+#[macro_use] extern crate serenity;
 extern crate typemap;
 extern crate url;
-extern crate chrono;
 
+use commands::register_commands;
+use dotenv::dotenv;
+use errors::*;
+use serenity::framework::standard::help_commands;
+use serenity::framework::StandardFramework;
+use serenity::model::gateway::Ready;
+use serenity::model::id::{GuildId, UserId};
+use serenity::prelude::*;
+use std::env;
+use std::thread;
+use std::time::{Duration, Instant};
+pub use util::*;
 cfg_if! {
     if #[cfg(feature = "diesel")] {
         #[macro_use] extern crate diesel;
@@ -20,20 +32,6 @@ cfg_if! {
 
 mod commands;
 mod util;
-
-use std::env;
-use std::thread;
-use std::time::{Duration, Instant};
-
-use serenity::prelude::*;
-use serenity::framework::StandardFramework;
-use serenity::framework::standard::help_commands;
-use serenity::model::gateway::Ready;
-use serenity::model::id::{UserId, GuildId};
-
-use dotenv::dotenv;
-
-use commands::register_commands;
 
 mod errors {
     error_chain! {
@@ -45,9 +43,6 @@ mod errors {
         }
     }
 }
-
-use errors::*;
-pub use util::*;
 
 lazy_static! {
     static ref TARGET_GUILD: u64 = dotenv!("TARGET_GUILD").parse().expect("unable to parse TARGET_GUILD as u64");
@@ -107,8 +102,14 @@ fn run() -> Result<()> {
         });
 
     framework = register_commands(framework);
-
     client.with_framework(framework);
+
+    let shard_manager = client.shard_manager.clone();
+    ctrlc::set_handler(move || {
+        info!("shutting down");
+        shard_manager.lock().shutdown_all();
+    }).expect("unable to create SIGINT/SIGTERM handlers");
+
     client.start()?;
 
     Ok(())
@@ -183,7 +184,8 @@ fn main() {
                 ::std::process::exit(1);
             },
             _ => {
-                warn!("somehow `run` completed without an error. should probably take a look at this.");
+                // NOTE: we MUST have gotten here through SIGINT/SIGTERM handlers
+                ::std::process::exit(0);
             }
         }
 
