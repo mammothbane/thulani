@@ -180,8 +180,6 @@ fn main() {
                 if let Some(bt) = e.backtrace() {
                     error!("backtrace: {:?}", bt);
                 }
-
-                ::std::process::exit(1);
             },
             _ => {
                 // NOTE: we MUST have gotten here through SIGINT/SIGTERM handlers
