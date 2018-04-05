@@ -1,17 +1,33 @@
 use super::schema::*;
 use chrono::naive::NaiveDateTime;
 
-#[derive(Insertable, Queryable, Identifiable, AsChangeset, Debug, Associations)]
-#[belongs_to(Audio)]
-#[belongs_to(Image)]
-#[belongs_to(TextMeme)]
-#[belongs_to(ImageMeme)]
-#[belongs_to(TextMeme)]
-#[table_name="metadata"]
-pub struct Metadata {
+#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
+#[table_name="text_memes"]
+pub struct TextMeme {
     pub id: i32,
-    pub created: NaiveDateTime,
-    pub created_by: i64,
+    pub title: String,
+    pub content: String,
+    pub image_id: Option<i32>,
+    pub audio_id: Option<i32>,
+    pub metadata_id: i32,
+}
+
+#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
+#[table_name="image_memes"]
+pub struct ImageMeme {
+    pub id: i32,
+    pub title: String,
+    pub image_id: i32,
+    pub metadata_id: i32,
+}
+
+#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
+#[table_name="audio_memes"]
+pub struct AudioMeme {
+    pub id: i32,
+    pub title: String,
+    pub audio_id: i32,
+    pub metadata_id: i32,
 }
 
 #[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug, Associations)]
@@ -34,24 +50,17 @@ pub struct Image {
     pub metadata_id: i32,
 }
 
-#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
-#[table_name="audio_memes"]
-pub struct AudioMeme {
+#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug, Associations)]
+#[belongs_to(Audio)]
+#[belongs_to(Image)]
+#[belongs_to(TextMeme)]
+#[belongs_to(ImageMeme)]
+#[belongs_to(TextMeme)]
+#[table_name="metadata"]
+pub struct Metadata {
     pub id: i32,
-    pub title: String,
-    pub audio_id: i32,
-    pub metadata_id: i32,
-}
-
-#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
-#[table_name="text_memes"]
-pub struct TextMeme {
-    pub id: i32,
-    pub title: String,
-    pub content: String,
-    pub image_id: Option<i32>,
-    pub audio_id: Option<i32>,
-    pub metadata_id: i32,
+    pub created: NaiveDateTime,
+    pub created_by: i64,
 }
 
 #[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug, Associations)]
