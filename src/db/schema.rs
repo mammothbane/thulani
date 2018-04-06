@@ -3,6 +3,7 @@ table! {
         id -> Int4,
         data -> Bytea,
         metadata_id -> Int4,
+        data_hash -> Bytea,
     }
 }
 
@@ -20,6 +21,7 @@ table! {
         id -> Int4,
         data -> Bytea,
         metadata_id -> Int4,
+        data_hash -> Bytea,
     }
 }
 

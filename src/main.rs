@@ -14,6 +14,8 @@ extern crate typemap;
 extern crate url;
 extern crate rand;
 extern crate either;
+extern crate reqwest;
+extern crate sha1;
 
 use commands::register_commands;
 use dotenv::dotenv;
@@ -126,6 +128,8 @@ fn main() {
     const BACKOFF_INIT: f64 = 100.0;
 
     const MIN_RUN_DURATION: Duration = Duration::from_secs(120);
+
+    info!("starting");
 
     dotenv().ok();
 
