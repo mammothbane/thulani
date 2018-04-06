@@ -54,8 +54,8 @@ impl NewMeme {
 pub struct Audio {
     pub id: i32,
     pub data: Vec<u8>,
-    pub data_hash: Vec<u8>,
     pub metadata_id: i32,
+    pub data_hash: Vec<u8>,
 }
 
 impl Audio {
@@ -93,8 +93,8 @@ impl Audio {
 #[table_name="audio"]
 pub struct NewAudio {
     pub data: Vec<u8>,
-    pub data_hash: Vec<u8>,
     pub metadata_id: i32,
+    pub data_hash: Vec<u8>,
 }
 
 
@@ -103,8 +103,8 @@ pub struct NewAudio {
 pub struct Image {
     pub id: i32,
     pub data: Vec<u8>,
-    pub data_hash: Vec<u8>,
     pub metadata_id: i32,
+    pub data_hash: Vec<u8>,
 }
 
 impl Image {
@@ -142,8 +142,8 @@ impl Image {
 #[table_name="images"]
 pub struct NewImage {
     pub data: Vec<u8>,
-    pub data_hash: Vec<u8>,
     pub metadata_id: i32,
+    pub data_hash: Vec<u8>,
 }
 
 
