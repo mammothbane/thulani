@@ -19,60 +19,58 @@ pub fn connection() -> Result<PgConnection> {
     CONN_MGR.connect().map_err(Error::from)
 }
 
-pub trait AssociatedData {
-    type Associated;
-
-    fn associated_data(&self, conn: &PgConnection) -> Result<Self::Associated>;
-}
-
-pub fn find_text(conn: &PgConnection, search: String) -> Result<TextMeme> {
+pub fn find_text(conn: &PgConnection, search: String) -> Result<Meme> {
+    use diesel::dsl::sql;
     let format_search = format!("%{}%", search);
 
-    text_memes::table
-        .filter(text_memes::title.ilike(&format_search).or(text_memes::content.ilike(&format_search)))
+    memes::table
+        .filter(memes::title.ilike(&format_search).or(sql(&format!("content ILIKE %{}%", search))))
         .limit(1)
-        .first::<TextMeme>(conn)
+        .first::<Meme>(conn)
         .map_err(Error::from)
 }
 
-pub fn find_audio(conn: &PgConnection, search: String) -> Result<AudioMeme> {
+pub fn find_audio(conn: &PgConnection, search: String) -> Result<Meme> {
     let format_search = format!("%{}%", search);
 
-    audio_memes::table
-        .filter(audio_memes::title.ilike(format_search))
+    memes::table
+        .filter(memes::title.ilike(format_search).and(memes::audio_id.is_not_null()))
         .limit(1)
-        .first::<AudioMeme>(conn)
+        .first::<Meme>(conn)
         .map_err(Error::from)
 }
 
-pub fn find_image(conn: &PgConnection, search: String) -> Result<ImageMeme> {
+pub fn find_image(conn: &PgConnection, search: String) -> Result<Meme> {
     let format_search = format!("%{}%", search);
 
-    image_memes::table
-        .filter(image_memes::title.ilike(format_search))
+    memes::table
+        .filter(memes::title.ilike(format_search).and(memes::image_id.is_not_null()))
         .limit(1)
-        .first::<ImageMeme>(conn)
+        .first::<Meme>(conn)
         .map_err(Error::from)
 }
 
-pub fn rand_text(conn: &PgConnection) -> Result<TextMeme> {
-    text_memes::table
+pub fn rand_text(conn: &PgConnection) -> Result<Meme> {
+    memes::table
+        .filter(memes::content.is_not_null())
         .order(random.desc())
-        .first::<TextMeme>(conn)
+        .first::<Meme>(conn)
         .map_err(Error::from)
 }
 
-pub fn rand_image(conn: &PgConnection) -> Result<ImageMeme> {
-    image_memes::table
+pub fn rand_image(conn: &PgConnection) -> Result<Meme> {
+    memes::table
+        .filter(memes::image_id.is_not_null())
         .order(random.desc())
-        .first::<ImageMeme>(conn)
+        .first::<Meme>(conn)
         .map_err(Error::from)
 }
 
-pub fn rand_audio(conn: &PgConnection) -> Result<AudioMeme> {
-    audio_memes::table
+pub fn rand_audio(conn: &PgConnection) -> Result<Meme> {
+    memes::table
+        .filter(memes::audio_id.is_not_null())
         .order(random.desc())
-        .first::<AudioMeme>(conn)
+        .first::<Meme>(conn)
         .map_err(Error::from)
 }
 
