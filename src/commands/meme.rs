@@ -7,6 +7,7 @@ use super::*;
 use super::playback::CtxExt;
 
 use ::db::*;
+use ::{Error, Result};
 
 #[derive(Clone, Copy, Debug)]
 enum MemeType {
@@ -27,8 +28,6 @@ static mut TTS_WEIGHTS: [Weighted<bool>; 2] = [
 ];
 
 command!(meme(ctx, msg, args) {
-    let ch = msg.channel_id;
-
     if args.len() == 0 {
         rand_meme(ctx, msg)?;
         return Ok(());
@@ -39,38 +38,50 @@ fn rand_meme(ctx: &Context, message: &Message) -> Result<()> {
     let conn = connection()?;
 
     let should_audio = ctx.currently_playing() && ctx.users_listening()?;
-    let dist: WeightedChoice<'static, MemeType> = if should_audio {
-        WeightedChoice::new(unsafe { &mut MEME_WEIGHTS })
+    let weights = if should_audio {
+        unsafe { &mut MEME_WEIGHTS }
     } else {
-        WeightedChoice::new(unsafe { &mut MEME_WEIGHTS[..2] })
+        unsafe { &mut MEME_WEIGHTS[..2] }
     };
 
-    match dist.sample(&mut thread_rng()) {
-        MemeType::Text => {
-            let mut text_meme = rand_text(&conn)?;
+    let dist = WeightedChoice::new(weights);
+
+    let mut mem = match dist.sample(&mut thread_rng()) {
+        MemeType::Text => rand_text(&conn),
+        MemeType::Image => rand_image(&conn),
+        MemeType::Audio => rand_audio(&conn),
+    }.map_err(Error::from);
+
+    mem = mem
+        .and_then(|mem| {
+            let mut mem = mem;
 
             let mut ctr = 0;
-            while !should_audio && text_meme.audio_id.is_some() {
-                text_meme = rand_text(&conn)?;
+            while !should_audio && mem.audio_id.is_some() {
+                mem = rand_text(&conn)?;
 
                 ctr += 1;
                 if ctr > 10 {
-                    warn!("looped 10 times trying to find a non-audio text meme");
-                    return Ok(());
+                    send(message.channel_id, "yer listenin to somethin else", message.tts)?;
+                    return Err("looped too many times trying to find a non-audio meme".into());
                 }
             }
 
-            send_meme(ctx, &text_meme, &conn, message)?;
-        },
-        MemeType::Image => send_meme(ctx, &rand_image(&conn)?, &conn, message)?,
-        MemeType::Audio => send_meme(ctx, &rand_audio(&conn)?, &conn, message)?,
+            Ok(mem)
+        });
+
+    if let Err(e) = mem {
+        send(message.channel_id, "i don't know any :(", message.tts)?;
+        return Err(e);
     }
 
-    Ok(())
+    send_meme(ctx, &mem?, &conn, message).map_err(Error::from)
 }
 
 
 fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Result<()> {
+    debug!("sending meme: {:?}", t);
+
     let image = t.image(conn);
     let audio = t.audio(conn);
 
