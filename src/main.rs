@@ -1,3 +1,5 @@
+#![feature(transpose_result)]
+
 #[macro_use] extern crate cfg_if;
 extern crate chrono;
 extern crate ctrlc;
@@ -10,6 +12,8 @@ extern crate fern;
 #[macro_use] extern crate serenity;
 extern crate typemap;
 extern crate url;
+extern crate rand;
+extern crate either;
 
 use commands::register_commands;
 use dotenv::dotenv;
@@ -39,7 +43,8 @@ mod errors {
             Serenity(::serenity::Error);
             MissingVar(::std::env::VarError);
             DieselConn(::diesel::ConnectionError) #[cfg(feature = "diesel")];
-            Diesel(::diesel::result::Error) #[cfg(feature = "diesel")]; 
+            Diesel(::diesel::result::Error) #[cfg(feature = "diesel")];
+            R2D2(::diesel::r2d2::Error) #[cfg(feature = "diesel")];
         }
     }
 }

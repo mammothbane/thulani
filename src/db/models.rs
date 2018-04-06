@@ -1,5 +1,9 @@
-use super::schema::*;
 use chrono::naive::NaiveDateTime;
+use diesel::prelude::*;
+
+use super::schema::*;
+use super::AssociatedData;
+use ::{Result, Error};
 
 #[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
 #[table_name="text_memes"]
@@ -12,6 +16,18 @@ pub struct TextMeme {
     pub metadata_id: i32,
 }
 
+impl AssociatedData for TextMeme {
+    type Associated = (Option<Image>, Option<Audio>);
+
+    fn associated_data(&self, conn: &PgConnection) -> Result<Self::Associated> {
+        let image = self.image_id.map(|x: i32| images::table.find(x).first(conn)).transpose()?;
+        let audio = self.audio_id.map(|x: i32| audio::table.find(x).first(conn)).transpose()?;
+
+        Ok((image, audio))
+    }
+}
+
+
 #[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
 #[table_name="image_memes"]
 pub struct ImageMeme {
@@ -20,6 +36,15 @@ pub struct ImageMeme {
     pub image_id: i32,
     pub metadata_id: i32,
 }
+
+impl AssociatedData for ImageMeme {
+    type Associated = Image;
+
+    fn associated_data(&self, conn: &PgConnection) -> Result<Self::Associated> {
+        images::table.find(self.image_id).first(conn).map_err(Error::from)
+    }
+}
+
 
 #[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
 #[table_name="audio_memes"]
@@ -30,9 +55,16 @@ pub struct AudioMeme {
     pub metadata_id: i32,
 }
 
-#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug, Associations)]
-#[belongs_to(AudioMeme)]
-#[belongs_to(TextMeme)]
+impl AssociatedData for AudioMeme {
+    type Associated = Audio;
+
+    fn associated_data(&self, conn: &PgConnection) -> Result<Self::Associated> {
+        audio::table.find(self.audio_id).first(conn).map_err(Error::from)
+    }
+}
+
+
+#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
 #[table_name="audio"]
 pub struct Audio {
     pub id: i32,
@@ -40,9 +72,7 @@ pub struct Audio {
     pub metadata_id: i32,
 }
 
-#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug, Associations)]
-#[belongs_to(ImageMeme)]
-#[belongs_to(TextMeme)]
+#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
 #[table_name="images"]
 pub struct Image {
     pub id: i32,
@@ -50,12 +80,7 @@ pub struct Image {
     pub metadata_id: i32,
 }
 
-#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug, Associations)]
-#[belongs_to(Audio)]
-#[belongs_to(Image)]
-#[belongs_to(TextMeme)]
-#[belongs_to(ImageMeme)]
-#[belongs_to(TextMeme)]
+#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
 #[table_name="metadata"]
 pub struct Metadata {
     pub id: i32,
@@ -63,8 +88,7 @@ pub struct Metadata {
     pub created_by: i64,
 }
 
-#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug, Associations)]
-#[belongs_to(Metadata)]
+#[derive(Insertable, Queryable, Identifiable, PartialEq, AsChangeset, Debug)]
 #[table_name="audit_records"]
 pub struct AuditRecord {
     pub id: i32,

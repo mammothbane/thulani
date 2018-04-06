@@ -2,6 +2,9 @@ use serenity::client::bridge::voice::ClientVoiceManager;
 use typemap::Key;
 use std::sync::{Arc, RwLock};
 use std::collections::VecDeque;
+
+use either::{Either, Left, Right};
+
 use super::*;
 
 pub struct VoiceManager;
@@ -19,7 +22,7 @@ impl VoiceManager {
 
 #[derive(Clone, Debug)]
 pub struct PlayArgs {
-    pub url: String,
+    pub data: Either<String, Vec<u8>>,
     pub initiator: String,
     pub sender_channel: ChannelId,
 }
@@ -90,7 +93,7 @@ impl PlayQueue {
 
                         let mut manager = voice_manager.lock();
                         manager.leave(*TARGET_GUILD_ID);
-                        debug!("disconnected due to inactivity");
+                        debug!("disconnected because playback finished");
                     }
                     continue;
                 }
@@ -98,18 +101,22 @@ impl PlayQueue {
                 let mut queue = queue_lck.write().unwrap();
                 let item = queue.queue.pop_front().unwrap();
 
-                trace!("checking ytdl for: {}", item.url);
-
-                let src = match ytdl(&item.url) {
-                    Ok(src) => src,
-                    Err(e) => {
-                        error!("bad link: {}; {:?}", &item.url, e);
-                        let _ = send(item.sender_channel, &format!("what the fuck"), false);
-                        continue;
+                let src = match item.data {
+                    Left(ref url) => {
+                        match ytdl(url) {
+                            Ok(src) => src,
+                            Err(e) => {
+                                error!("bad link: {}; {:?}", url, e);
+                                let _ = send(item.sender_channel, "what the fuck", false);
+                                continue;
+                            }
+                        }
+                    },
+                    Right(ref vec) => {
+                        ::serenity::voice::opus(true, ::std::io::Cursor::new(vec.clone()))
                     }
                 };
 
-                trace!("got ytdl item for {}", item.url);
 
                 let mut manager = voice_manager.lock();
                 let handler = manager.join(*TARGET_GUILD_ID, must_env_lookup::<u64>("VOICE_CHANNEL"));

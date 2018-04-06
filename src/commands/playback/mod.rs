@@ -1,8 +1,36 @@
-use super::*;
+use either::{Left, Right};
+use serenity::voice::{LockedAudio, ytdl};
 
+use super::*;
 pub use self::types::*;
 
 mod types;
+
+pub trait CtxExt {
+    fn currently_playing(&self) -> bool;
+    fn users_listening(&self) -> Result<bool>;
+}
+
+impl CtxExt for Context {
+    fn currently_playing(&self) -> bool {
+        let queue_lock = self.data.lock().get::<PlayQueue>().cloned().unwrap();
+        let play_queue = queue_lock.read().unwrap();
+        play_queue.playing.is_none()
+    }
+
+    fn users_listening(&self) -> Result<bool> {
+        let channel_id = ChannelId(must_env_lookup::<u64>("VOICE_CHANNEL"));
+        let channel = channel_id.get()?;
+        let res = channel.guild()
+            .and_then(|ch| ch.read().guild())
+            .map(|g| (&g.read().voice_states)
+                .into_iter()
+                .any(|(_, state)| state.channel_id == Some(channel_id)))
+            .unwrap_or(false);
+
+        Ok(res)
+    }
+}
 
 pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
     debug!("playing '{}'", url);
@@ -16,16 +44,12 @@ pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
         return Ok(());
     }
 
-    trace!("acquiring queue lock");
-
     let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
     let mut play_queue = queue_lock.write().unwrap();
 
-    trace!("queue lock acquired");
-
     play_queue.queue.push_back(PlayArgs{
         initiator: msg.author.name.clone(),
-        url: url.to_owned(),
+        data: Left(url.to_owned()),
         sender_channel: msg.channel_id,
     });
 
@@ -169,7 +193,13 @@ command!(list(ctx, msg) {
         Some(ref info) => {
             let audio = info.audio.lock();
             let status = if audio.playing { "playing" } else { "paused:" };
-            send(msg.channel_id, &format!("Currently {} `{}` ({})", status, info.init_args.url, info.init_args.initiator), msg.tts)?;
+
+            let playing_info = match info.init_args.data {
+                Left(ref url) => format!(" `{}`", url),
+                Right(_) => "memeing".to_owned(),
+            };
+
+            send(msg.channel_id, &format!("Currently {} {} ({})", status, playing_info, info.init_args.initiator), msg.tts)?;
         },
         None => {
             debug!("`list` called with no items in queue");
@@ -179,6 +209,11 @@ command!(list(ctx, msg) {
     }
 
     play_queue.queue.iter().for_each(|info| {
-        channel.say(&format!("`{}` ({})", info.url, info.initiator)).unwrap();
+        let playing_info = match info.data {
+            Left(ref url) => format!("`{}`", url),
+            Right(_) => "meme".to_owned(),
+        };
+
+        channel.say(&format!("{} ({})", playing_info, info.initiator)).unwrap();
     });
 });

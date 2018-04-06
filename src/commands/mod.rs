@@ -3,7 +3,6 @@ use serenity::framework::StandardFramework;
 use serenity::model::channel::Message;
 use serenity::model::id::ChannelId;
 use serenity::prelude::*;
-use serenity::voice::{LockedAudio, ytdl};
 use std::thread;
 use std::time::Duration;
 
@@ -12,30 +11,6 @@ mod sound;
 
 pub use self::sound::*;
 pub use self::playback::*;
-
-cfg_if! {
-    if #[cfg(feature = "diesel")] {
-        mod db;
-        pub use self::db::*;
-
-        fn register_db(f: StandardFramework) -> StandardFramework {
-            f
-                .command("meme", |c| c
-                .guild_only(true)
-                .help_available(false)
-                .cmd(meme))
-        }
-    } else {
-        fn register_db(f: StandardFramework) -> StandardFramework {
-            f
-        }
-    }
-}
-
-fn send(channel: ChannelId, text: &str, tts: bool) -> Result<()> {
-    channel.send_message(|m| m.content(text).tts(tts))?;
-    Ok(())
-}
 
 pub fn register_commands(f: StandardFramework) -> StandardFramework {
     let f: StandardFramework = register_db(f);
@@ -80,9 +55,13 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
         .cmd(volume))
     .unrecognised_command(|ctx, msg, unrec| {
         let url = match msg.content.split_whitespace().skip(1).next() {
-            Some(x) => x,
+            Some(x) if x.starts_with("http") => x,
+            Some(x) => {
+                let _ = db_fallback(ctx, msg, x);
+                return;
+            },
             None => {
-                info!("received unrecognized command: {}", unrec);
+                info!("bad command formatting: '{}'", unrec);
                 let _ = send(msg.channel_id, "format your commands right. fuck you.", msg.tts);
                 return;
             }
@@ -92,4 +71,33 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
      })
 }
 
+cfg_if! {
+    if #[cfg(feature = "diesel")] {
+        mod meme;
+        pub use self::meme::*;
+
+        fn register_db(f: StandardFramework) -> StandardFramework {
+            f
+                .command("meme", |c| c
+                .guild_only(true)
+                .help_available(false)
+                .cmd(meme))
+        }
+    } else {
+        fn register_db(f: StandardFramework) -> StandardFramework {
+            f
+        }
+
+        fn db_fallback(_: &mut Context, msg: &Message, s: &str) -> Result<()> {
+            info!("received unrecognized command: {}", s);
+            let _ = send(msg.channel_id, "format your commands right. fuck you.", msg.tts)?;
+            Ok(())
+        }
+    }
+}
+
+fn send(channel: ChannelId, text: &str, tts: bool) -> Result<()> {
+    channel.send_message(|m| m.content(text).tts(tts))?;
+    Ok(())
+}
 
