@@ -99,7 +99,19 @@ fn run() -> Result<()> {
                     trace!("command completed successfully");
                 },
                 Err(e) => {
-                    error!("encountered error: {:?}", e);
+                    match e {
+                        Error(e) => {
+                            error!("error encountered handling request: {}", e);
+                            e.iter().skip(1).for_each(|e| {
+                                error!("caused by: {}", e);
+                            });
+
+                            if let Some(bt) = e.backtrace() {
+                                error!("backtrace: {:?}", bt);
+                            }
+                        }
+                        e => error!("encountered error: {:?}", e);
+                    }
                 }
             }
         })

@@ -10,10 +10,13 @@ use reqwest::{
         Headers,
         ContentLength,
         UserAgent,
+        Accept,
         AcceptEncoding,
         Encoding,
         qitem,
-    }
+        ContentType,
+    },
+    mime
 };
 
 use super::*;
@@ -61,6 +64,10 @@ command!(meme(ctx, msg, args) {
             let mut headers = Headers::new();
             headers.set(AcceptEncoding(vec!(qitem(Encoding::Gzip))));
             headers.set(UserAgent::new("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:59.0) Gecko/20100101 Firefox/59.0)"));
+            headers.set(Accept(vec![
+                qitem(mime::IMAGE_STAR),
+                qitem("video/webm".parse().unwrap())
+            ]));
 
             let client = Client::builder()
                 .default_headers(headers)
@@ -69,6 +76,7 @@ command!(meme(ctx, msg, args) {
 
             let conn = connection()?;
 
+            info!("args.len: {}; args: {:?}", args.len(), args);
             while args.len() > 0 {
                 match next!().as_ref() {
                     "text" => new_meme.content = Some(args.full().to_owned()),
@@ -85,8 +93,12 @@ command!(meme(ctx, msg, args) {
                             .map(|ct_len| **ct_len)
                             .unwrap_or(0);
 
-                        if len > 20_000_000 {
-                            send(msg.channel_id, "are you trying to bankrupt my disk space", msg.tts)?;
+                        let content_type_valid = resp.headers().get::<ContentType>()
+                            .map(|ct_type| ct_type.type_() == "image" || (ct_type.type_() == "video" && ct_type.subtype() == "webm"))
+                            .unwrap_or(false);
+
+                        if len > 20_000_000 || !content_type_valid {
+                            send(msg.channel_id, "yer pushin me over the fuckin line", msg.tts)?;
                             return Ok(());
                         }
 
@@ -101,8 +113,12 @@ command!(meme(ctx, msg, args) {
                             .map(|ct_len| **ct_len)
                             .unwrap_or(0);
 
-                        if len > 20_000_000 {
-                            send(msg.channel_id, "are you fucking serious", msg.tts)?;
+                        let content_type_valid = resp.headers().get::<ContentType>()
+                            .map(|ct_type| ct_type.type_() == "image" || (ct_type.type_() == "video" && ct_type.subtype() == "webm"))
+                            .unwrap_or(false);
+
+                        if len > 20_000_000 || !content_type_valid {
+                            send(msg.channel_id, "are ye fuckin serious", msg.tts)?;
                             return Ok(());
                         }
 
