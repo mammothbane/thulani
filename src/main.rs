@@ -5,21 +5,21 @@ extern crate chrono;
 extern crate ctrlc;
 extern crate dotenv;
 #[macro_use] extern crate dotenv_codegen;
-#[macro_use] extern crate error_chain;
+#[macro_use] extern crate failure;
 extern crate fern;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
-#[macro_use] extern crate serenity;
+extern crate serenity;
 extern crate typemap;
 extern crate url;
 extern crate rand;
 extern crate either;
 extern crate reqwest;
 extern crate sha1;
+extern crate mime_guess;
 
 use commands::register_commands;
 use dotenv::dotenv;
-use errors::*;
 use serenity::framework::standard::help_commands;
 use serenity::framework::StandardFramework;
 use serenity::model::gateway::Ready;
@@ -28,6 +28,9 @@ use serenity::prelude::*;
 use std::env;
 use std::thread;
 use std::time::{Duration, Instant};
+
+use failure::Error;
+
 pub use util::*;
 cfg_if! {
     if #[cfg(feature = "diesel")] {
@@ -39,23 +42,12 @@ cfg_if! {
 mod commands;
 mod util;
 
-mod errors {
-    error_chain! {
-        foreign_links {
-            Serenity(::serenity::Error);
-            MissingVar(::std::env::VarError);
-            DieselConn(::diesel::ConnectionError) #[cfg(feature = "diesel")];
-            Diesel(::diesel::result::Error) #[cfg(feature = "diesel")];
-            R2D2(::diesel::r2d2::Error) #[cfg(feature = "diesel")];
-        }
-    }
-}
+pub type Result<T> = ::std::result::Result<T, Error>;
 
 lazy_static! {
     static ref TARGET_GUILD: u64 = dotenv!("TARGET_GUILD").parse().expect("unable to parse TARGET_GUILD as u64");
     static ref TARGET_GUILD_ID: GuildId = GuildId(*TARGET_GUILD);
 }
-
 
 struct Handler;
 impl EventHandler for Handler {
@@ -93,25 +85,13 @@ fn run() -> Result<()> {
 
             result          
         })
-        .after(|_ctx, _msg, _cmd, err| {
+        .after(|_ctx, _msg, cmd, err| {
             match err {
                 Ok(()) => {
-                    trace!("command completed successfully");
+                    trace!("command '{}' completed successfully", cmd);
                 },
                 Err(e) => {
-                    match e {
-                        Error(e) => {
-                            error!("error encountered handling request: {}", e);
-                            e.iter().skip(1).for_each(|e| {
-                                error!("caused by: {}", e);
-                            });
-
-                            if let Some(bt) = e.backtrace() {
-                                error!("backtrace: {:?}", bt);
-                            }
-                        }
-                        e => error!("encountered error: {:?}", e);
-                    }
+                    error!("error encountered handling command '{}': {:?}", cmd, e);
                 }
             }
         })
@@ -193,14 +173,7 @@ fn main() {
         info!("starting bot");
         match run() {
             Err(e) => {
-                error!("error encountered running client: {}", e);
-                e.iter().skip(1).for_each(|e| {
-                    error!("caused by: {}", e);
-                });
-
-                if let Some(bt) = e.backtrace() {
-                    error!("backtrace: {:?}", bt);
-                }
+                error!("error encountered running client: {:?}", e);
             },
             _ => {
                 // NOTE: we MUST have gotten here through SIGINT/SIGTERM handlers

@@ -8,7 +8,7 @@ default = ["diesel"]
 
 [dependencies]
 lazy_static = "1.0"
-error-chain = "0.11.0"
+failure = "0.1"
 log = "0.4"
 typemap = "0.3.3"
 url = "1.6.0"
@@ -23,10 +23,9 @@ rand = "0.5.0-pre.0"
 either = "1.5.0"
 reqwest = "0.8"
 sha1 = { version = "0.6.0", features = ["std"] }
+mime_guess = "1.8.4"
 
 [dependencies.serenity]
-# version = "~0.5"
 default-features = false
 features = ["builder", "cache", "client", "framework", "model", "utils", "voice", "standard_framework"]
-git = "https://github.com/zeyla/serenity"
-rev = "b71d99"
+git = "https://github.com/mammothbane/serenity"

@@ -3,6 +3,7 @@ use serenity::voice::{LockedAudio, ytdl};
 
 use super::*;
 pub use self::types::*;
+use serenity::framework::standard::Args;
 
 mod types;
 
@@ -56,24 +57,20 @@ pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
     Ok(())
 }
 
-command!(play(ctx, msg, args) {
+pub fn play(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     if args.len() == 0 {
-        _resume(ctx, msg)?;
-        return Ok(());
+        return _resume(ctx, msg);
     }
 
     let url = match args.single::<String>() {
         Ok(url) => url,
-        Err(_) => {
-            send(msg.channel_id, "BAD LINK", msg.tts)?;
-            return Ok(());
-        }
+        Err(_) => return send(msg.channel_id, "BAD LINK", msg.tts),
     };
 
-    _play(ctx, msg, &url)?;
-});
+    _play(ctx, msg, &url)
+}
 
-command!(pause(ctx, msg) {
+pub fn pause(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let mut queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
 
     let done = || send(msg.channel_id, "r u srs", msg.tts);
@@ -82,10 +79,7 @@ command!(pause(ctx, msg) {
 
         let current_item = match play_queue.playing {
             Some(ref x) => x,
-            None => {
-                done()?;
-                return Ok(());
-            },
+            None => return done(),
         };
 
         let audio = current_item.audio.lock();
@@ -93,8 +87,7 @@ command!(pause(ctx, msg) {
     };
 
     if !playing {
-        done()?;
-        return Ok(());
+        return done();
     }
 
     {
@@ -102,11 +95,13 @@ command!(pause(ctx, msg) {
         let ref audio = queue.playing.clone().unwrap().audio;
         audio.lock().pause();
     }
-});
 
-command!(resume(ctx, msg) {
-    _resume(ctx, msg)?;
-});
+    Ok(())
+}
+
+pub fn resume(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
+    _resume(ctx, msg)
+}
 
 fn _resume(ctx: &mut Context, msg: &Message) -> Result<()> {
     let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
@@ -141,7 +136,7 @@ fn _resume(ctx: &mut Context, msg: &Message) -> Result<()> {
     Ok(())
 }
 
-command!(skip(ctx, _msg) {
+pub fn skip(ctx: &mut Context, _msg: &Message, _args: Args) -> Result<()> {
     let data = ctx.data.lock();
 
     let mut mgr_lock = data.get::<VoiceManager>().cloned().unwrap();
@@ -156,15 +151,17 @@ command!(skip(ctx, _msg) {
     } else {
         debug!("got skip with no handler attached");
     }
-});
 
-command!(die(ctx, msg) {
+    Ok(())
+}
+
+pub fn die(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let data = ctx.data.lock();
 
-    let mut mgr_lock = data.get::<VoiceManager>().cloned().unwrap();
+    let mgr_lock = data.get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 
-    let mut queue_lock = data.get::<PlayQueue>().cloned().unwrap();
+    let queue_lock = data.get::<PlayQueue>().cloned().unwrap();
 
     {
         let mut play_queue = queue_lock.write().unwrap();
@@ -180,11 +177,13 @@ command!(die(ctx, msg) {
         send(msg.channel_id, "YOU die", msg.tts)?;
         debug!("got die with no handler attached");
     }
-});
 
-command!(list(ctx, msg) {
-    let mut queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
-    let mut play_queue = queue_lock.read().unwrap();
+    Ok(())
+}
+
+pub fn list(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
+    let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+    let play_queue = queue_lock.read().unwrap();
 
     let channel_tmp = msg.channel().unwrap().guild().unwrap();
     let channel = channel_tmp.read();
@@ -208,12 +207,15 @@ command!(list(ctx, msg) {
         },
     }
 
-    play_queue.queue.iter().for_each(|info| {
-        let playing_info = match info.data {
-            Left(ref url) => format!("`{}`", url),
-            Right(_) => "meme".to_owned(),
-        };
+    play_queue.queue.iter()
+        .for_each(|info| {
+            let playing_info = match info.data {
+                Left(ref url) => format!("`{}`", url),
+                Right(_) => "meme".to_owned(),
+            };
 
-        channel.say(&format!("{} ({})", playing_info, info.initiator)).unwrap();
-    });
-});
+            let _ = channel.say(&format!("{} ({})", playing_info, info.initiator));
+        });
+
+    Ok(())
+}

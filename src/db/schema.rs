@@ -22,6 +22,7 @@ table! {
         data -> Bytea,
         metadata_id -> Int4,
         data_hash -> Bytea,
+        filename -> Varchar,
     }
 }
 

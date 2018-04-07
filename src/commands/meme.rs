@@ -3,6 +3,7 @@ use std::time::Duration;
 use rand::{thread_rng, distributions::{Weighted, WeightedChoice, Distribution}};
 use serenity::http::AttachmentType;
 use serenity::builder::CreateMessage;
+use serenity::framework::standard::Args;
 use diesel::PgConnection;
 use reqwest::{
     Client,
@@ -43,10 +44,9 @@ static mut TTS_WEIGHTS: [Weighted<bool>; 2] = [
     Weighted { weight: 1, item: true }
 ];
 
-command!(meme(ctx, msg, args) {
+pub fn meme(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     if args.len_quoted() == 0 {
-        rand_meme(ctx, msg)?;
-        return Ok(());
+        return rand_meme(ctx, msg);
     }
 
     macro_rules! next { () => { args.single_quoted::<String>()?.to_lowercase() }; }
@@ -76,17 +76,44 @@ command!(meme(ctx, msg, args) {
 
             let conn = connection()?;
 
-            info!("args.len: {}; args: {:?}", args.len(), args);
-            while args.len() > 0 {
+            while args.len_quoted() > 0 {
+                info!("args.len_quoted: {}; args: {:?}", args.len_quoted(), args);
                 match next!().as_ref() {
-                    "text" => new_meme.content = Some(args.full().to_owned()),
+                    "text" => {
+                        new_meme.content = Some(args.full().to_owned());
+                        break;
+                    },
                     "image" => {
-                        let url = args.single_quoted::<String>()?;
+                        if new_meme.image_id.is_some() {
+                            send(msg.channel_id, "ONLY ONE IMAGE YOU FUCK", msg.tts)?;
+                            bail!("user tried to supply more than one image");
+                        }
+
+                        let mut url = args.single_quoted::<String>()?;
+
+                        if url.to_lowercase().trim() == "attached" {
+                            let res = msg.attachments.first()
+                                .ok_or::<Error>(::failure::err_msg("no attachments found"))
+                                .and_then(|att| {
+                                    let data = att.download()?;
+                                    let image_id = Image::create(&conn, &att.filename, data, msg.author.id.0)?;
+                                    new_meme.image_id = Some(image_id);
+
+                                    Ok(())
+                                });
+
+                            if res.is_err() {
+                                send(msg.channel_id, "fix yer gotdang attachments", msg.tts)?;
+                                return res;
+                            }
+
+                            continue;
+                        }
+
                         let resp = client.head(&url).send()?;
 
                         if !resp.status().is_success() {
-                            send(msg.channel_id, "pick a better url next time thanks", msg.tts)?;
-                            return Ok(());
+                            return send(msg.channel_id, "pick a better url next time thanks", msg.tts);
                         }
 
                         let len = resp.headers().get::<ContentLength>()
@@ -98,15 +125,13 @@ command!(meme(ctx, msg, args) {
                             .unwrap_or(false);
 
                         if len > 20_000_000 || !content_type_valid {
-                            send(msg.channel_id, "yer pushin me over the fuckin line", msg.tts)?;
-                            return Ok(());
+                            return send(msg.channel_id, "yer pushin me over the fuckin line", msg.tts);
                         }
 
                         let mut resp = client.get(&url).send()?;
 
                         if !resp.status().is_success() {
-                            send(msg.channel_id, "pick a better url next time thanks", msg.tts)?;
-                            return Ok(());
+                            return send(msg.channel_id, "bad link reeeeee", msg.tts);
                         }
 
                         let len = resp.headers().get::<ContentLength>()
@@ -118,56 +143,57 @@ command!(meme(ctx, msg, args) {
                             .unwrap_or(false);
 
                         if len > 20_000_000 || !content_type_valid {
-                            send(msg.channel_id, "are ye fuckin serious", msg.tts)?;
-                            return Ok(());
-                        }
-
-                        if !resp.status().is_success() {
-                            send(msg.channel_id, "bad link reeeeee", msg.tts)?;
-                            return Ok(());
+                            return send(msg.channel_id, "are ye fuckin serious", msg.tts);
                         }
 
                         let mut data = Vec::with_capacity(len as usize);
                         ::std::io::copy(&mut resp, &mut data)?;
 
-                        let image_id = Image::create(&conn, data, msg.author.id.0)?;
+                        let ext = resp.headers().get::<ContentType>()
+                            .and_then(|typ| ::mime_guess::get_extensions(typ.type_().as_str(), typ.subtype().as_str()))
+                            .and_then(|x| x.first())
+                            .unwrap_or(&"bin");
+
+                        let filename = format!("{}.{}", new_meme.title, *ext);
+
+                        let image_id = Image::create(&conn, &filename, data, msg.author.id.0)?;
                         new_meme.image_id = Some(image_id);
                     },
                     "audio" | "sound" => {
                         let _url = args.single_quoted::<String>()?;
                     },
                     _ => {
-                        send(msg.channel_id, "hueh?", msg.tts)?;
-                        return Ok(());
+                        return send(msg.channel_id, "hueh?", msg.tts);
                     }
                 }
             }
 
             if new_meme.content.is_none() && new_meme.image_id.is_none() && new_meme.audio_id.is_none() {
-                send(msg.channel_id, "haha it's empty lol xdddd", msg.tts)?;
-                return Ok(());
+                return send(msg.channel_id, "hahAA it's empty xdddd", msg.tts);
             }
 
             new_meme.save(&conn, msg.author.id.0)?;
-            send(msg.channel_id, "i hate my job", msg.tts)?;
+            send(msg.channel_id, "i hate my job", msg.tts)?
         },
         "delete" | "remove" => {
-            send(msg.channel_id, "hwaet", msg.tts)?;
+            send(msg.channel_id, "hwaet", msg.tts)?
         },
         search => {
             let conn = connection()?;
             let mem = match find_meme(&conn, search) {
                 Ok(x) => x,
-                Err(_) => {
+                Err(e) => {
                     send(msg.channel_id, "what in ryan's name", msg.tts)?;
-                    return Ok(());
+                    return Err(e)
                 },
             };
 
             send_meme(ctx, &mem, &conn, msg)?;
         }
     }
-});
+
+    Ok(())
+}
 
 fn rand_meme(ctx: &Context, message: &Message) -> Result<()> {
     let conn = connection()?;
@@ -198,7 +224,7 @@ fn rand_meme(ctx: &Context, message: &Message) -> Result<()> {
                 ctr += 1;
                 if ctr > 10 {
                     send(message.channel_id, "yer listenin to somethin else", message.tts)?;
-                    return Err("looped too many times trying to find a non-audio meme".into());
+                    bail!("looped too many times trying to find a non-audio meme");
                 }
             }
 
@@ -233,7 +259,10 @@ fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Res
     };
 
     match image {
-        Some(image) => msg.channel_id.send_files(vec!(AttachmentType::Bytes((&image?.data, &t.title))), create_msg)?,
+        Some(image) => {
+            let image = image?;
+            msg.channel_id.send_files(vec!(AttachmentType::Bytes((&image.data, &image.filename))), create_msg)?
+        },
         None => msg.channel_id.send_message(create_msg)?,
     };
 

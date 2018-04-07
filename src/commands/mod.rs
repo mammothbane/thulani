@@ -18,41 +18,41 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
         .command("skip", |c| c
         .desc("skip the rest of the current request")
         .guild_only(true)
-        .cmd(skip))
+        .exec(skip))
     .command("pause", |c| c
         .desc("pause playback (currently broken)")
         .guild_only(true)
-        .cmd(pause))
+        .exec(pause))
     .command("resume", |c| c
         .desc("resume playing (currently broken)")
         .guild_only(true)
-        .cmd(resume))
+        .exec(resume))
     .command("list", |c| c
         .known_as("queue")
         .desc("list playing and queued requests")
         .guild_only(true)
-        .cmd(list))
+        .exec(list))
     .command("die", |c| c
         .batch_known_as(vec!["sudoku", "stop"])
         .desc("stop playing and empty the queue")
         .guild_only(true)
-        .cmd(die))
+        .exec(die))
     .command("mute", |c| c
         .desc("mute thulani (playback continues)")
         .guild_only(true)
-        .cmd(mute))
+        .exec(mute))
     .command("unmute", |c| c
         .desc("unmute thulani")
         .guild_only(true)
-        .cmd(unmute))
+        .exec(unmute))
     .command("play", |c| c
         .desc("queue a request")
         .guild_only(true)
-        .cmd(play))
+        .exec(play))
     .command("volume", |c| c
         .desc("set playback volume")
         .guild_only(true)
-        .cmd(volume))
+        .exec(volume))
     .unrecognised_command(|ctx, msg, unrec| {
         let url = match msg.content.split_whitespace().skip(1).next() {
             Some(x) if x.starts_with("http") => x,

@@ -1,9 +1,10 @@
 use super::*;
+use serenity::framework::standard::Args;
 
 pub const DEFAULT_VOLUME: f32 = 0.05;
 
-command!(mute(ctx, _msg) {
-    let mut mgr_lock = ctx.data.lock().get::<VoiceManager>().cloned().unwrap();
+pub fn mute(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
+    let mgr_lock = ctx.data.lock().get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 
     manager.get_mut(*TARGET_GUILD_ID)
@@ -15,10 +16,12 @@ command!(mute(ctx, _msg) {
                 trace!("Muted");
             }
         });
-});
 
-command!(unmute(ctx, msg) {
-    let mut mgr_lock = ctx.data.lock().get::<VoiceManager>().cloned().unwrap();
+    Ok(())
+}
+
+pub fn unmute(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
+    let mgr_lock = ctx.data.lock().get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 
     manager.get_mut(*TARGET_GUILD_ID)
@@ -31,9 +34,11 @@ command!(unmute(ctx, msg) {
                 let _ = send(msg.channel_id, "REEEEEEEEEEEEEE", msg.tts);
             }
         });
-});
 
-command!(volume(ctx, msg, args) {
+    Ok(())
+}
+
+pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     if args.len() == 0 {
         let vol = {
             let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
@@ -41,20 +46,13 @@ command!(volume(ctx, msg, args) {
             (play_queue.volume / DEFAULT_VOLUME * 100.0) as usize
         };
 
-        send(msg.channel_id, &format!("Volume: {}/100", vol), msg.tts)?;
-        return Ok(());
+        return send(msg.channel_id, &format!("Volume: {}/100", vol), msg.tts);
     }
 
-    let mut vol: usize = match args.single::<f32>() {
-        Ok(vol) if vol.is_nan() => {
-            send(msg.channel_id, "you're a fuck", msg.tts)?;
-            return Ok(());
-        },
+    let vol: usize = match args.single::<f32>() {
+        Ok(vol) if vol.is_nan() => return send(msg.channel_id, "you're a fuck", msg.tts),
         Ok(vol) => vol as usize,
-        Err(_) => {
-            send(msg.channel_id, "???????", msg.tts)?;
-            return Ok(());
-        },
+        Err(_) => return send(msg.channel_id, "???????", msg.tts),
     };
 
     let mut vol: f32 = (vol as f32)/100.0;  // force aliasing to reasonable values
@@ -67,7 +65,7 @@ command!(volume(ctx, msg, args) {
         vol = 0.0;
     }
 
-    let mut queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+    let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
 
     {
         let mut play_queue = queue_lock.write().unwrap();
@@ -84,5 +82,7 @@ command!(volume(ctx, msg, args) {
 
         let mut audio = current_item.audio.lock();
         audio.volume(play_queue.volume);
-    };
-});
+    }
+
+    Ok(())
+}

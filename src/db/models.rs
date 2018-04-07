@@ -105,10 +105,11 @@ pub struct Image {
     pub data: Vec<u8>,
     pub metadata_id: i32,
     pub data_hash: Vec<u8>,
+    pub filename: String,
 }
 
 impl Image {
-    pub fn create(conn: &PgConnection, data: Vec<u8>, by_user: u64) -> Result<i32> {
+    pub fn create(conn: &PgConnection, filename: &str, data: Vec<u8>, by_user: u64) -> Result<i32> {
         let mut data_hash = ::sha1::Sha1::new();
         data_hash.update(&data);
         let data_hash = data_hash.digest().bytes().to_vec();
@@ -127,6 +128,7 @@ impl Image {
         let new_image = NewImage {
             data,
             data_hash,
+            filename: filename.to_owned(),
             metadata_id: metadata.id,
         };
 
@@ -144,6 +146,7 @@ pub struct NewImage {
     pub data: Vec<u8>,
     pub metadata_id: i32,
     pub data_hash: Vec<u8>,
+    pub filename: String,
 }
 
 
