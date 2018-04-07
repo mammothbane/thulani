@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use rand::{thread_rng, distributions::{Weighted, WeightedChoice, Distribution}};
+use rand::{thread_rng, Rng};
 use serenity::http::AttachmentType;
 use serenity::builder::CreateMessage;
 use serenity::framework::standard::Args;
@@ -25,24 +25,6 @@ use super::playback::CtxExt;
 
 use ::db::*;
 use ::{Error, Result};
-
-#[derive(Clone, Copy, Debug)]
-enum MemeType {
-    Text,
-    Image,
-    Audio,
-}
-
-static mut MEME_WEIGHTS: [Weighted<MemeType>; 3] = [
-    Weighted { weight: 1, item: MemeType::Text },
-    Weighted { weight: 1, item: MemeType::Image },
-    Weighted { weight: 1, item: MemeType::Audio },
-];
-
-static mut TTS_WEIGHTS: [Weighted<bool>; 2] = [
-    Weighted { weight: 4, item: false },
-    Weighted { weight: 1, item: true }
-];
 
 pub fn meme(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     if args.len_quoted() == 0 {
@@ -199,24 +181,16 @@ fn rand_meme(ctx: &Context, message: &Message) -> Result<()> {
     let conn = connection()?;
 
     let should_audio = ctx.currently_playing() && ctx.users_listening()?;
-    let weights = if should_audio {
-        unsafe { &mut MEME_WEIGHTS }
-    } else {
-        unsafe { &mut MEME_WEIGHTS[..2] }
-    };
+    let modulus = if should_audio { 3 } else { 2 };
 
-    let dist = WeightedChoice::new(weights);
-
-    let mut mem = match dist.sample(&mut thread_rng()) {
-        MemeType::Text => rand_text(&conn),
-        MemeType::Image => rand_image(&conn),
-        MemeType::Audio => rand_audio(&conn),
-    }.map_err(Error::from);
-
-    mem = mem
-        .and_then(|mem| {
-            let mut mem = mem;
-
+    let mut mem = match thread_rng().gen::<u32>() % modulus {
+        0 => rand_text(&conn),
+        1 => rand_image(&conn),
+        2 => rand_audio(&conn),
+        _ => unreachable!(),
+    }
+        .or_else(|_| rand_text(&conn))
+        .and_then(|mut mem| {
             let mut ctr = 0;
             while !should_audio && mem.audio_id.is_some() {
                 mem = rand_text(&conn)?;
@@ -231,9 +205,12 @@ fn rand_meme(ctx: &Context, message: &Message) -> Result<()> {
             Ok(mem)
         });
 
-    if let Err(e) = mem {
-        send(message.channel_id, "i don't know any :(", message.tts)?;
-        return Err(e);
+    match mem {
+        Err(e) => {
+            send(message.channel_id, "i don't know any :(", message.tts)?;
+            return Err(e);
+        },
+        _ => {},
     }
 
     send_meme(ctx, &mem?, &conn, message).map_err(Error::from)
@@ -246,11 +223,9 @@ fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Res
     let image = t.image(conn);
     let audio = t.audio(conn);
 
-    let dist = WeightedChoice::new(unsafe { &mut TTS_WEIGHTS });
-
     let create_msg = |m: CreateMessage| {
         let ret = m
-            .tts(dist.sample(&mut thread_rng()));
+            .tts(thread_rng().gen::<u32>() % 25 == 0);
 
         match t.content {
             Some(ref text) => ret.content(text),

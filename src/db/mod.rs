@@ -22,7 +22,7 @@ pub fn connection() -> Result<PgConnection> {
 
 pub fn find_meme<T: AsRef<str>>(conn: &PgConnection, search: T) -> Result<Meme> {
     use diesel::dsl::sql;
-    use diesel::types::Text;
+    use diesel::sql_types::Text;
 
     let search = search.as_ref();
     let format_search = format!("%{}%", search);
@@ -37,7 +37,7 @@ pub fn find_meme<T: AsRef<str>>(conn: &PgConnection, search: T) -> Result<Meme> 
 
 pub fn find_text<T: AsRef<str>>(conn: &PgConnection, search: T) -> Result<Meme> {
     use diesel::dsl::sql;
-    use diesel::types::Text;
+    use diesel::sql_types::Text;
 
     let search = search.as_ref();
     let format_search = format!("%{}%", search);
