@@ -19,162 +19,145 @@ use reqwest::{
     },
     mime
 };
+use regex::{Regex, Match};
+use clap::{Arg, App, SubCommand, AppSettings};
 
 use super::*;
 use super::playback::CtxExt;
 
-use ::db::*;
-use ::{Error, Result};
+use db::*;
+use failure::Error;
+use Result;
 
-pub fn meme(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
-    if args.len_quoted() == 0 {
-        return rand_meme(ctx, msg);
-    }
+lazy_static! {
+    static ref COMMAND_REGEX: Regex = Regex::new(
+        r"^!(?:thulani|thulando|thulando madando|thulan)\s+meme\s*(.*)"
+    ).expect("unable to compile command regex");
 
-    macro_rules! next { () => { args.single_quoted::<String>()?.to_lowercase() }; }
+    static ref QUOTES_REGEX: Regex = Regex::new(
+        r##"^\s*(?:"([^"]*)"|([^"\s]*))\s*$"##
+    ).expect("unable to compile quotes regex");
 
-    match next!().as_ref() {
-        "add" => { // e.g.: !thulani meme add title [image IMAGE] [audio|sound AUDIO] [text TEXT...]
-            let mut new_meme = NewMeme {
-                title: next!(),
-                content: None,
-                image_id: None,
-                audio_id: None,
-                metadata_id: 0,
-            };
+    static ref HELP_REGEX: Regex = Regex::new(
+        r##"(?:^|\s)(?:--help|-h)(?:\s|$)"##
+    ).expect("unable to compile help regex");
+}
 
-            let mut headers = Headers::new();
-            headers.set(AcceptEncoding(vec!(qitem(Encoding::Gzip))));
-            headers.set(UserAgent::new("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:59.0) Gecko/20100101 Firefox/59.0)"));
-            headers.set(Accept(vec![
-                qitem(mime::IMAGE_STAR),
-                qitem("video/webm".parse().unwrap())
-            ]));
+pub fn meme(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
+    let arg_str = COMMAND_REGEX
+        .captures(&msg.content)
+        .ok_or::<Error>(::failure::err_msg("message content not recognized"))?
+        .get(1)
+        .ok_or::<Error>(::failure::err_msg("first capture group not found"))?
+        .as_str();
 
-            let client = Client::builder()
-                .default_headers(headers)
-                .timeout(Duration::from_secs(5))
-                .build()?;
+    let args = QUOTES_REGEX
+        .captures_iter(arg_str)
+        .map(|capture| {
+            capture.iter()
+                .skip(1)
+                .fold(None, |acc, opt| acc.or(opt))
+                .map(|m: Match| m.as_str())
+                .ok_or::<Error>(::failure::err_msg("couldn't extract matching group from capture"))
+        })
+        .collect::<Result<Vec<_>>>()?;
 
-            let conn = connection()?;
-
-            while args.len_quoted() > 0 {
-                info!("args.len_quoted: {}; args: {:?}", args.len_quoted(), args);
-                match next!().as_ref() {
-                    "text" => {
-                        new_meme.content = Some(args.full().to_owned());
-                        break;
-                    },
-                    "image" => {
-                        if new_meme.image_id.is_some() {
-                            send(msg.channel_id, "ONLY ONE IMAGE YOU FUCK", msg.tts)?;
-                            bail!("user tried to supply more than one image");
-                        }
-
-                        let mut url = args.single_quoted::<String>()?;
-
-                        if url.to_lowercase().trim() == "attached" {
-                            let res = msg.attachments.first()
-                                .ok_or::<Error>(::failure::err_msg("no attachments found"))
-                                .and_then(|att| {
-                                    let data = att.download()?;
-                                    let image_id = Image::create(&conn, &att.filename, data, msg.author.id.0)?;
-                                    new_meme.image_id = Some(image_id);
-
-                                    Ok(())
-                                });
-
-                            if res.is_err() {
-                                send(msg.channel_id, "fix yer gotdang attachments", msg.tts)?;
-                                return res;
-                            }
-
-                            continue;
-                        }
-
-                        let resp = client.head(&url).send()?;
-
-                        if !resp.status().is_success() {
-                            return send(msg.channel_id, "pick a better url next time thanks", msg.tts);
-                        }
-
-                        let len = resp.headers().get::<ContentLength>()
-                            .map(|ct_len| **ct_len)
-                            .unwrap_or(0);
-
-                        let content_type_valid = resp.headers().get::<ContentType>()
-                            .map(|ct_type| ct_type.type_() == "image" || (ct_type.type_() == "video" && ct_type.subtype() == "webm"))
-                            .unwrap_or(false);
-
-                        if len > 20_000_000 || !content_type_valid {
-                            return send(msg.channel_id, "yer pushin me over the fuckin line", msg.tts);
-                        }
-
-                        let mut resp = client.get(&url).send()?;
-
-                        if !resp.status().is_success() {
-                            return send(msg.channel_id, "bad link reeeeee", msg.tts);
-                        }
-
-                        let len = resp.headers().get::<ContentLength>()
-                            .map(|ct_len| **ct_len)
-                            .unwrap_or(0);
-
-                        let content_type_valid = resp.headers().get::<ContentType>()
-                            .map(|ct_type| ct_type.type_() == "image" || (ct_type.type_() == "video" && ct_type.subtype() == "webm"))
-                            .unwrap_or(false);
-
-                        if len > 20_000_000 || !content_type_valid {
-                            return send(msg.channel_id, "are ye fuckin serious", msg.tts);
-                        }
-
-                        let mut data = Vec::with_capacity(len as usize);
-                        ::std::io::copy(&mut resp, &mut data)?;
-
-                        let ext = resp.headers().get::<ContentType>()
-                            .and_then(|typ| ::mime_guess::get_extensions(typ.type_().as_str(), typ.subtype().as_str()))
-                            .and_then(|x| x.first())
-                            .unwrap_or(&"bin");
-
-                        let filename = format!("{}.{}", new_meme.title, *ext);
-
-                        let image_id = Image::create(&conn, &filename, data, msg.author.id.0)?;
-                        new_meme.image_id = Some(image_id);
-                    },
-                    "audio" | "sound" => {
-                        let _url = args.single_quoted::<String>()?;
-                    },
-                    _ => {
-                        return send(msg.channel_id, "hueh?", msg.tts);
-                    }
-                }
-            }
-
-            if new_meme.content.is_none() && new_meme.image_id.is_none() && new_meme.audio_id.is_none() {
-                return send(msg.channel_id, "hahAA it's empty xdddd", msg.tts);
-            }
-
-            new_meme.save(&conn, msg.author.id.0)?;
-            send(msg.channel_id, "i hate my job", msg.tts)?
-        },
-        "delete" | "remove" => {
-            send(msg.channel_id, "hwaet", msg.tts)?
-        },
-        search => {
-            let conn = connection()?;
-            let mem = match find_meme(&conn, search) {
-                Ok(x) => x,
-                Err(e) => {
-                    send(msg.channel_id, "what in ryan's name", msg.tts)?;
-                    return Err(e)
-                },
-            };
-
-            send_meme(ctx, &mem, &conn, msg)?;
+    let matches = match app().get_matches_from_safe_borrow(args.iter()) {
+        Ok(x) => x,
+        Err(_) => {
+            return send(msg.channel_id, "hwaet the fuck fix your syntax", msg.tts);
         }
+    };
+
+    lazy_static! {
+        static ref HELP: String = {
+            let mut str = Vec::new();
+            app().write_long_help(&mut str).expect("unable to write out help");
+            String::from_utf8(str).expect("unable to read long help as utf8")
+        };
     }
 
-    Ok(())
+    if HELP_REGEX.is_match(arg_str) { // because clap is stupid
+        return send(msg.channel_id, &format!("```{}```", &*HELP), msg.tts);
+    }
+
+    if let Some(add_matches) = matches.subcommand_matches("add") {
+        lazy_static! {
+            static ref ADD_HELP: String = {
+                let mut str = Vec::new();
+                app().write_long_help(&mut str).expect("unable to write out help");
+                String::from_utf8(str).expect("unable to read long help as utf8")
+            };
+        }
+
+        if HELP_REGEX.is_match(arg_str) { // because clap is stupid
+            return send(msg.channel_id, &format!("```{}```", &*ADD_HELP), msg.tts);
+        }
+
+        let image = add_matches.value_of("image");
+        let audio = add_matches.value_of("audio");
+        let text = add_matches.value_of("text");
+
+        let title = add_matches.value_of("title")
+            .ok_or::<Error>(::failure::err_msg("somehow found no title for new meme"))?;
+
+        if image.is_none() && audio.is_none() && text.is_none() {
+            return send(msg.channel_id, "hahAA it's empty xdddd", msg.tts);
+        }
+
+        let conn = connection()?;
+
+        lazy_static! {
+            static ref CLIENT: Client = {
+                let mut headers = Headers::new();
+                headers.set(AcceptEncoding(vec!(qitem(Encoding::Gzip))));
+                headers.set(UserAgent::new("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:59.0) Gecko/20100101 Firefox/59.0)"));
+                headers.set(Accept(vec![
+                    qitem(mime::IMAGE_STAR),
+                    qitem("video/webm".parse().unwrap())
+                ]));
+
+                Client::builder()
+                    .default_headers(headers)
+                    .timeout(Duration::from_secs(5))
+                    .build()
+                    .expect("couldn't construct http client")
+            };
+        }
+
+        let image_id = image.map(|url| load_image(&*CLIENT, &conn, url, title, msg)).transpose()?;
+
+        if let Some(_) = audio {
+            return send(msg.channel_id, "hueh?", msg.tts);
+        }
+
+        return NewMeme {
+            title: title.to_owned(),
+            content: text.map(|s| s.to_owned()),
+            image_id,
+            audio_id: None,
+            metadata_id: 0,
+        }.save(&conn, msg.author.id.0).map(|_| {});
+    }
+
+    if let Some(_) = matches.subcommand_matches("delete") {
+        return send(msg.channel_id, "hwaet", msg.tts);
+    }
+
+    if let Some(search) = matches.value_of("SEARCH") {
+        let conn = connection()?;
+        let mem = match find_meme(&conn, search) {
+            Ok(x) => x,
+            Err(e) => {
+                send(msg.channel_id, "what in ryan's name", msg.tts)?;
+                return Err(e)
+            },
+        };
+
+        return send_meme(ctx, &mem, &conn, msg);
+    }
+
+    rand_meme(ctx, msg)
 }
 
 fn rand_meme(ctx: &Context, message: &Message) -> Result<()> {
@@ -183,7 +166,7 @@ fn rand_meme(ctx: &Context, message: &Message) -> Result<()> {
     let should_audio = ctx.currently_playing() && ctx.users_listening()?;
     let modulus = if should_audio { 3 } else { 2 };
 
-    let mut mem = match thread_rng().gen::<u32>() % modulus {
+    let mem = match thread_rng().gen::<u32>() % modulus {
         0 => rand_text(&conn),
         1 => rand_image(&conn),
         2 => rand_audio(&conn),
@@ -259,8 +242,118 @@ fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Res
     Ok(())
 }
 
-pub fn db_fallback(ctx: &mut Context, msg: &Message, s: &str) -> Result<()> {
+fn load_image(client: &Client, conn: &PgConnection, url: &str, title: &str, msg: &Message) -> Result<i32> {
+    let url = url.to_owned();
+    if url.to_lowercase().trim() == "attached" {
+        let res = msg.attachments.first()
+            .ok_or::<Error>(::failure::err_msg("no attachments found"))
+            .and_then(|att| {
+                let data = att.download()?;
+                let image_id = Image::create(&conn, &att.filename, data, msg.author.id.0)?;
 
+                Ok(image_id)
+            });
 
-    Ok(())
+        if res.is_err() {
+            send(msg.channel_id, "fix yer gotdang attachments", msg.tts)?;
+        }
+
+        return res;
+    }
+
+    let resp = client.head(&url).send()?;
+
+    if !resp.status().is_success() {
+        send(msg.channel_id, "pick a better url next time thanks", msg.tts)?;
+        bail!("request failed");
+    }
+
+    let len = resp.headers().get::<ContentLength>()
+        .map(|ct_len| **ct_len)
+        .unwrap_or(0);
+
+    let content_type_valid = resp.headers().get::<ContentType>()
+        .map(|ct_type| ct_type.type_() == "image" || (ct_type.type_() == "video" && ct_type.subtype() == "webm"))
+        .unwrap_or(false);
+
+    if len > 20_000_000 || !content_type_valid {
+        send(msg.channel_id, "yer pushin me over the fuckin line", msg.tts)?;
+        bail!("content invalid");
+    }
+
+    let mut resp = client.get(&url).send()?;
+
+    if !resp.status().is_success() {
+        send(msg.channel_id, "bad link reeeeee", msg.tts)?;
+        bail!("request failed");
+    }
+
+    let len = resp.headers().get::<ContentLength>()
+        .map(|ct_len| **ct_len)
+        .unwrap_or(0);
+
+    let content_type_valid = resp.headers().get::<ContentType>()
+        .map(|ct_type| ct_type.type_() == "image" || (ct_type.type_() == "video" && ct_type.subtype() == "webm"))
+        .unwrap_or(false);
+
+    if len > 20_000_000 || !content_type_valid {
+        send(msg.channel_id, "are ye fuckin serious", msg.tts)?;
+        bail!("content invalid");
+    }
+
+    let mut data = Vec::with_capacity(len as usize);
+    ::std::io::copy(&mut resp, &mut data)?;
+
+    let ext = resp.headers().get::<ContentType>()
+        .and_then(|typ| ::mime_guess::get_extensions(typ.type_().as_str(), typ.subtype().as_str()))
+        .and_then(|x| x.first())
+        .unwrap_or(&"bin");
+
+    let filename = format!("{}.{}", title, *ext);
+    Image::create(conn, &filename, data, msg.author.id.0)
+}
+
+fn app<'a, 'b>() -> App<'a, 'b> {
+    App::new("!thulani meme")
+        .about("manipulate memes. pass no arguments to produce a randomly-selected meme.")
+        .settings(&vec![AppSettings::DisableHelpSubcommand, AppSettings::DisableVersion])
+        .arg(Arg::with_name("SEARCH")
+            .index(1)
+            .help("search for a meme by name or content (exact, case-insensitive matches only)")
+        )
+        .subcommand(SubCommand::with_name("add")
+            .about("add a meme to the database")
+            .arg(Arg::with_name("TITLE")
+                .help("title for new meme")
+                .required(true)
+                .index(1)
+            )
+            .arg(Arg::with_name("image")
+                .short("i")
+                .long("image")
+                .multiple(false)
+                .help("url of image to attach (use 'attached' to use image attached to message)")
+                .takes_value(true)
+            )
+            .arg(Arg::with_name("audio")
+                .short("a")
+                .long("audio")
+                .multiple(false)
+                .help("address of a video downloadable with youtube-dl. timestamps not yet supported.")
+                .takes_value(true)
+            )
+            .arg(Arg::with_name("text")
+                .short("t")
+                .long("text")
+                .multiple(false)
+                .help("text to play back")
+                .takes_value(true)
+            )
+        )
+        .subcommand(SubCommand::with_name("delete")
+            .about("delete a meme from the database")
+            .arg(Arg::with_name("title")
+                .index(1)
+            )
+        )
 }

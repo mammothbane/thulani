@@ -1,6 +1,5 @@
 #![feature(transpose_result)]
 
-#[macro_use] extern crate cfg_if;
 extern crate chrono;
 extern crate ctrlc;
 extern crate dotenv;
@@ -17,6 +16,8 @@ extern crate either;
 extern crate reqwest;
 extern crate sha1;
 extern crate mime_guess;
+extern crate regex;
+extern crate clap;
 
 use commands::register_commands;
 use dotenv::dotenv;
@@ -32,12 +33,12 @@ use std::time::{Duration, Instant};
 use failure::Error;
 
 pub use util::*;
-cfg_if! {
-    if #[cfg(feature = "diesel")] {
-        #[macro_use] extern crate diesel;
-        mod db;
-    }
-}
+
+#[cfg(feature = "diesel")]
+#[macro_use] extern crate diesel;
+
+#[cfg(feature = "diesel")]
+mod db;
 
 mod commands;
 mod util;

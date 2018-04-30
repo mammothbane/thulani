@@ -1,9 +1,9 @@
 use super::*;
 use serenity::framework::standard::Args;
 
-pub const DEFAULT_VOLUME: f32 = 0.05;
+pub const DEFAULT_VOLUME: f32 = 0.10;
 
-pub fn mute(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
+pub fn mute(ctx: &mut Context, _: &Message, _: Args) -> Result<()> {
     let mgr_lock = ctx.data.lock().get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 

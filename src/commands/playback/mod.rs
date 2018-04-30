@@ -71,7 +71,7 @@ pub fn play(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 }
 
 pub fn pause(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
-    let mut queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+    let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
 
     let done = || send(msg.channel_id, "r u srs", msg.tts);
     let playing = {
@@ -139,10 +139,10 @@ fn _resume(ctx: &mut Context, msg: &Message) -> Result<()> {
 pub fn skip(ctx: &mut Context, _msg: &Message, _args: Args) -> Result<()> {
     let data = ctx.data.lock();
 
-    let mut mgr_lock = data.get::<VoiceManager>().cloned().unwrap();
+    let mgr_lock = data.get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 
-    let mut queue_lock = data.get::<PlayQueue>().cloned().unwrap();
+    let queue_lock = data.get::<PlayQueue>().cloned().unwrap();
 
     if let Some(handler) = manager.get_mut(*TARGET_GUILD_ID) {
         handler.stop();
