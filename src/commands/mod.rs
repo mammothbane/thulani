@@ -87,8 +87,8 @@ fn register_db(f: StandardFramework) -> StandardFramework {
     f
 }
 
-fn send(channel: ChannelId, text: &str, tts: bool) -> Result<()> {
-    channel.send_message(|m| m.content(text).tts(tts))?;
+fn send<A: AsRef<str>>(channel: ChannelId, text: A, tts: bool) -> Result<()> {
+    channel.send_message(|m| m.content(text.as_ref()).tts(tts))?;
     Ok(())
 }
 

@@ -46,7 +46,7 @@ pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
             (play_queue.volume / DEFAULT_VOLUME * 100.0) as usize
         };
 
-        return send(msg.channel_id, &format!("Volume: {}/100", vol), msg.tts);
+        return send(msg.channel_id, &format!("volume: {}%", vol), msg.tts);
     }
 
     let vol: usize = match args.single::<f32>() {
@@ -56,6 +56,7 @@ pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     };
 
     let mut vol: f32 = (vol as f32)/100.0;  // force aliasing to reasonable values
+    let adjusted_text = if vol > 3.0 { " (300% max)" } else { "" };
 
     if vol > 3.0 {
         vol = 3.0;
@@ -71,6 +72,8 @@ pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         let mut play_queue = queue_lock.write().unwrap();
         play_queue.volume = vol * DEFAULT_VOLUME;
     }
+
+    send(msg.channel_id, format!("volume adjusted{}", adjusted_text), msg.tts)?;
 
     {
         let play_queue = queue_lock.read().unwrap();
