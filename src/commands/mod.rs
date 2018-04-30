@@ -80,6 +80,22 @@ fn register_db(f: StandardFramework) -> StandardFramework {
             .guild_only(true)
             .help_available(false)
             .cmd(meme))
+        .command("addmeme", |c| c
+            .guild_only(true)
+            .desc("first argument is title, everything after is text. one attached image is included if present.")
+            .cmd(addmeme)
+        )
+        .command("delmeme", |c| c
+            .guild_only(true)
+            .desc("not currently working")
+            .cmd(delmeme)
+        )
+        .command("renamememe", |c| c
+            .guild_only(true)
+            .desc("not currently working")
+            .help_available(false)
+            .cmd(renamememe)
+        )
 }
 
 #[cfg(not(feature = "diesel"))]
