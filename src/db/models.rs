@@ -203,3 +203,22 @@ pub struct NewAuditRecord {
     pub updated_by: i64,
     pub metadata_id: i32,
 }
+
+#[derive(Queryable, Identifiable, PartialEq, Debug)]
+#[table_name="tombstones"]
+pub struct Tombstone {
+    pub id: i32,
+    pub deleted: NaiveDateTime,
+    pub deleted_by: i64,
+    pub metadata_id: i32,
+    pub meme_id: i32,
+}
+
+
+#[derive(Insertable, PartialEq, Debug)]
+#[table_name="tombstones"]
+pub struct NewTombstone {
+    pub deleted_by: i64,
+    pub metadata_id: i32,
+    pub meme_id: i32,
+}

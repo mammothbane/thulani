@@ -1,6 +1,6 @@
 [package]
 name = "thulani"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Nathan Perry <avaglir@gmail.com>"]
 
 [features]

@@ -61,11 +61,16 @@ pub fn addmeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         metadata_id: 0,
     }.save(&conn, msg.author.id.0).map(|_| {})?;
 
-    return msg.react("👌");
+    msg.react("👌")
 }
 
-pub fn delmeme(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
-    send(msg.channel_id, "hwaet", msg.tts)
+pub fn delmeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+    let title = args.single_quoted::<String>()?;
+
+    let conn = connection()?;
+    delete_meme(&conn, &title, msg.author.id.0)?;
+
+    msg.react("💀")
 }
 
 pub fn renamememe(_: &mut Context, msg: &Message, _: Args) -> Result<()> {

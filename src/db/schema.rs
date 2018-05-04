@@ -45,12 +45,23 @@ table! {
     }
 }
 
+table! {
+    tombstones (id) {
+        id -> Int4,
+        meme_id -> Int4,
+        deleted_by -> Int8,
+        deleted_at -> Timestamp,
+        metadata_id -> Nullable<Int4>,
+    }
+}
+
 joinable!(audio -> metadata (metadata_id));
 joinable!(audit_records -> metadata (metadata_id));
 joinable!(images -> metadata (metadata_id));
 joinable!(memes -> audio (audio_id));
 joinable!(memes -> images (image_id));
 joinable!(memes -> metadata (metadata_id));
+joinable!(tombstones -> metadata (metadata_id));
 
 allow_tables_to_appear_in_same_query!(
     audio,
@@ -58,4 +69,5 @@ allow_tables_to_appear_in_same_query!(
     images,
     memes,
     metadata,
+    tombstones,
 );

@@ -59,6 +59,14 @@ impl EventHandler for Handler {
         if guild.is_none() {
             info!("bot isn't in configured guild. join here: {:?}", OAUTH_URL.as_str());
         }
+
+        #[cfg(debug_assertions)] {
+            let _ = guild.map(|g| g.id().edit_nickname(Some("thulani (dev)")));
+        }
+
+        #[cfg(not(debug_assertions))] {
+            let _ = guild.map(|g| g.id().edit_nickname(Some("thulani")));
+        }
     }
 }
 
