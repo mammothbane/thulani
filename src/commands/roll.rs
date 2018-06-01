@@ -54,7 +54,7 @@ pub fn roll(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     };
 
     let mut rng = thread_rng();
-    let total = (0..dice_count).map(|_| rng.gen_range(0, faces)).sum::<usize>() + adjust + 1;
+    let total = (0..dice_count).map(|_| rng.gen_range(0, faces)).sum::<usize>() + adjust + dice_count;
 
     send(msg.channel_id, &format!("{}", total), msg.tts)
 }
