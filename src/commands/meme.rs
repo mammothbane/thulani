@@ -3,13 +3,25 @@ use serenity::http::AttachmentType;
 use serenity::builder::CreateMessage;
 use serenity::framework::standard::Args;
 use diesel::PgConnection;
+use failure::Error;
+use std::sync::RwLock;
 
 use super::*;
 use super::playback::CtxExt;
 
 use db::*;
-use failure::Error;
 use Result;
+
+lazy_static! {
+    static ref LAST_MEME: RwLock<Option<i32>> = RwLock::new(None);
+}
+
+fn update_meme(meme: &Meme) -> Result<()> {
+    let mut opt = LAST_MEME.write().map_err(|_| ::failure::err_msg("unable to acquire lock"))?;
+    *opt = Some(meme.id);
+
+    Ok(())
+}
 
 pub fn meme(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     if args.len() == 0 {
@@ -20,14 +32,53 @@ pub fn meme(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
     let conn = connection()?;
     let mem = match find_meme(&conn, search) {
-        Ok(x) => x,
+        Ok(x) => {
+            update_meme(&x)?;
+
+            x
+        },
         Err(e) => {
-            send(msg.channel_id, "what in ryan's name", msg.tts)?;
+            use diesel::{NotFound, self};
+
+            if let Some(NotFound) = e.downcast_ref::<diesel::result::Error>() {
+                send(msg.channel_id, "c'mon baby, guesstimate", msg.tts)?;
+            } else {
+                send(msg.channel_id, "what in ryan's name", msg.tts)?;
+            }
+
             return Err(e)
         },
     };
 
     send_meme(ctx, &mem, &conn, msg)
+}
+
+pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
+    use failure::err_msg;
+
+    let conn = connection()?;
+    let meme = LAST_MEME.read()
+        .map_err(|_| err_msg("unable to acquire read lock"))
+        .and_then(|id| {
+            id.ok_or(err_msg("no previous meme"))
+                .and_then(|id| {
+                    Meme::find(&conn, id)
+                })
+        });
+
+    match meme {
+        Ok(ref meme) => {
+            let metadata = Metadata::find(&conn, meme.metadata_id)?;
+            let author = ::TARGET_GUILD_ID.member(metadata.created_by as u64)?;
+
+            send(msg.channel_id,
+                 &format!("that was \"{}\" by {} ({})",
+                          meme.title, author.mention(), metadata.created.date()), msg.tts)?
+        },
+        Err(_) => send(msg.channel_id, "heuueueeeeh?", msg.tts)?,
+    };
+
+    meme.map(|_| {})
 }
 
 pub fn addmeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
@@ -106,14 +157,15 @@ fn rand_meme(ctx: &Context, message: &Message) -> Result<()> {
         });
 
     match mem {
-        Err(e) => {
-            send(message.channel_id, "i don't know any :(", message.tts)?;
-            return Err(e);
+        Ok(mem) => {
+            update_meme(&mem)?;
+            send_meme(ctx, &mem, &conn, message).map_err(Error::from)
         },
-        _ => {},
+        err @ Err(_) => {
+            send(message.channel_id, "i don't know any :(", message.tts)?;
+            err.map(|_| {})
+        },
     }
-
-    send_meme(ctx, &mem?, &conn, message).map_err(Error::from)
 }
 
 

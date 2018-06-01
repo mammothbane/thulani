@@ -23,6 +23,10 @@ impl Meme {
     pub fn audio(&self, conn: &PgConnection) -> Option<Result<Audio>> {
         self.audio_id.map(|x: i32| audio::table.filter(audio::id.eq(x)).first(conn).map_err(Error::from))
     }
+
+    pub fn find(conn: &PgConnection, id: i32) -> Result<Meme> {
+        memes::table.find(id).get_result(conn).map_err(Error::from)
+    }
 }
 
 #[derive(Insertable, PartialEq, Debug)]
@@ -164,6 +168,12 @@ impl Metadata {
             .values(&NewMetadata {
                 created_by: by_user as i64,
             })
+            .get_result::<Metadata>(conn)
+            .map_err(Error::from)
+    }
+
+    pub fn find(conn: &PgConnection, id: i32) -> Result<Metadata> {
+        metadata::table.find(id)
             .get_result::<Metadata>(conn)
             .map_err(Error::from)
     }

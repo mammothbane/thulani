@@ -3,6 +3,7 @@ use std::convert::AsRef;
 
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, ManageConnection};
+use diesel::NotFound;
 
 use super::{Result, Error};
 pub use self::models::*;
@@ -25,13 +26,23 @@ pub fn find_meme<T: AsRef<str>>(conn: &PgConnection, search: T) -> Result<Meme> 
     use diesel::sql_types::Text;
 
     let search = search.as_ref();
-    let format_search = format!("%{}%", search);
 
     // TODO: check for injection
-    memes::table
-        .filter(memes::title.ilike(&format_search).or(sql("content ILIKE ").bind::<Text, _>(&format_search)))
+    let mut meme = memes::table
+        .filter(memes::title.eq(search))
         .limit(1)
-        .first::<Meme>(conn)
+        .first::<Meme>(conn);
+
+    if let Err(NotFound) = meme {
+        let format_search = format!("%{}%", search);
+
+        meme = memes::table
+            .filter(memes::title.ilike(&format_search).or(sql("content ILIKE ").bind::<Text, _>(&format_search)))
+            .limit(1)
+            .first::<Meme>(conn);
+    }
+
+    meme
         .map_err(Error::from)
 }
 

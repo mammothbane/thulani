@@ -87,7 +87,7 @@ fn register_db(f: StandardFramework) -> StandardFramework {
         )
         .command("delmeme", |c| c
             .guild_only(true)
-            .desc("not currently working")
+            .desc("delete a meme by name (exact match only)")
             .cmd(delmeme)
         )
         .command("renamememe", |c| c
@@ -95,6 +95,14 @@ fn register_db(f: StandardFramework) -> StandardFramework {
             .desc("not currently working")
             .help_available(false)
             .cmd(renamememe)
+        )
+        .command("wat", |c| c
+            .known_as("what")
+            .known_as("last")
+            .known_as("lastmeme")
+            .guild_only(true)
+            .desc("check info for last meme")
+            .cmd(wat)
         )
 }
 
