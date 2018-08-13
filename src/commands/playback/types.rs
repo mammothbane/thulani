@@ -123,7 +123,7 @@ impl PlayQueue {
 
                 match handler {
                     Some(handler) => {
-                        let mut audio = handler.play_only(src);
+                        let audio = handler.play_only(src);
                         {
                             audio.lock().volume(queue.volume);
                         }

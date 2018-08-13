@@ -42,7 +42,7 @@ pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     if args.len() == 0 {
         let vol = {
             let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
-            let mut play_queue = queue_lock.read().unwrap();
+            let play_queue = queue_lock.read().unwrap();
             (play_queue.volume / DEFAULT_VOLUME * 100.0) as usize
         };
 
