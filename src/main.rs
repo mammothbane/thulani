@@ -19,7 +19,7 @@ extern crate mime_guess;
 extern crate regex;
 extern crate clap;
 
-use commands::register_commands;
+use self::commands::register_commands;
 use dotenv::dotenv;
 use serenity::framework::standard::help_commands;
 use serenity::framework::StandardFramework;
@@ -32,7 +32,7 @@ use std::time::{Duration, Instant};
 
 use failure::Error;
 
-pub use util::*;
+pub use self::util::*;
 
 #[cfg(feature = "diesel")]
 #[macro_use] extern crate diesel;
