@@ -5,19 +5,20 @@ use serenity::framework::standard::Args;
 use diesel::PgConnection;
 use failure::Error;
 use std::sync::RwLock;
+use lazy_static::lazy_static;
 
 use super::*;
 use super::playback::CtxExt;
 
-use db::*;
-use Result;
+use crate::db::*;
+use crate::Result;
 
 lazy_static! {
     static ref LAST_MEME: RwLock<Option<i32>> = RwLock::new(None);
 }
 
 fn update_meme(meme: &Meme) -> Result<()> {
-    let mut opt = LAST_MEME.write().map_err(|_| ::failure::err_msg("unable to acquire lock"))?;
+    let mut opt = LAST_MEME.write().map_err(|_| crate::failure::err_msg("unable to acquire lock"))?;
     *opt = Some(meme.id);
 
     Ok(())
@@ -69,7 +70,7 @@ pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
     match meme {
         Ok(ref meme) => {
             let metadata = Metadata::find(&conn, meme.metadata_id)?;
-            let author = ::TARGET_GUILD_ID.member(metadata.created_by as u64)?;
+            let author = crate::TARGET_GUILD_ID.member(metadata.created_by as u64)?;
 
             send(msg.channel_id,
                  &format!("that was \"{}\" by {} ({})",

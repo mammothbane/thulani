@@ -1,23 +1,9 @@
 #![feature(transpose_result)]
 
-extern crate chrono;
-extern crate ctrlc;
-extern crate dotenv;
-#[macro_use] extern crate dotenv_codegen;
-#[macro_use] extern crate failure;
-extern crate fern;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
-extern crate serenity;
-extern crate typemap;
-extern crate url;
-extern crate rand;
-extern crate either;
-extern crate reqwest;
-extern crate sha1;
-extern crate mime_guess;
-extern crate regex;
-extern crate clap;
+#[macro_use] extern crate dotenv_codegen;
+#[macro_use] extern crate failure;
 
 use self::commands::register_commands;
 use dotenv::dotenv;
@@ -26,8 +12,7 @@ use serenity::framework::StandardFramework;
 use serenity::model::gateway::Ready;
 use serenity::model::id::{GuildId, UserId};
 use serenity::prelude::*;
-use std::env;
-use std::thread;
+use std::{env, thread};
 use std::time::{Duration, Instant};
 
 use failure::Error;

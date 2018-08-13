@@ -2,7 +2,7 @@ use chrono::naive::NaiveDateTime;
 use diesel::prelude::*;
 
 use super::schema::*;
-use ::{Result, Error};
+use crate::{Result, Error};
 
 #[derive(Queryable, Identifiable, PartialEq, Debug)]
 #[table_name="memes"]

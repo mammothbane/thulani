@@ -4,7 +4,7 @@ use serenity::model::channel::Message;
 use regex::Regex;
 use rand::prelude::*;
 
-use Result;
+use crate::Result;
 
 use super::send;
 
