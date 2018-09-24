@@ -77,7 +77,7 @@ impl EventHandler for Handler {
 }
 
 fn run() -> Result<()> {
-    let token = &env::var("THULANI_TOKEN")?;
+    let token = &dotenv::var("THULANI_TOKEN").map_err(|e| format_err!("missing token"))?;
     let mut client = Client::new(token, Handler)?;
 
     commands::VoiceManager::register(&mut client);

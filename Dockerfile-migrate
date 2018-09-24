@@ -1,0 +1,9 @@
+FROM christophwurst/diesel-cli
+
+ENV DEBIAN_FRONTEND noninteractive
+RUN apt-get update -yqq && apt-get install -yqq postgresql postgresql-contrib
+
+COPY migrations ./migrations
+COPY setup_db.sh Cargo.toml ./
+
+CMD ["./setup_db.sh"]

@@ -1,0 +1,8 @@
+.idea/
+target/
+Cargo.lock
+LICENSE
+.gitignore
+.dockerignore
+Dockerfile
+.env.example
