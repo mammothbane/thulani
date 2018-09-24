@@ -1,26 +1,47 @@
 #![feature(transpose_result)]
+#![feature(crate_in_paths)]
 
-#[macro_use] extern crate lazy_static;
-#[macro_use] extern crate log;
-#[macro_use] extern crate dotenv_codegen;
-#[macro_use] extern crate failure;
-
-use self::commands::register_commands;
-use dotenv::dotenv;
-use serenity::framework::standard::help_commands;
-use serenity::framework::StandardFramework;
-use serenity::model::gateway::Ready;
-use serenity::model::id::{GuildId, UserId};
-use serenity::prelude::*;
-use std::{env, thread};
-use std::time::{Duration, Instant};
-
-use failure::Error;
-
-pub use self::util::*;
-
+extern crate chrono;
 #[cfg(feature = "diesel")]
 #[macro_use] extern crate diesel;
+extern crate dotenv;
+#[macro_use] extern crate dotenv_codegen;
+extern crate either;
+#[macro_use] extern crate failure;
+extern crate fern;
+#[macro_use] extern crate lazy_static;
+#[macro_use] extern crate log;
+extern crate rand;
+extern crate regex;
+extern crate serenity;
+extern crate sha1;
+extern crate typemap;
+extern crate url;
+
+use dotenv::dotenv;
+use failure::Error;
+use self::commands::register_commands;
+pub use self::util::*;
+use serenity::{
+    framework::{
+        standard::help_commands,
+        StandardFramework,
+    },
+    model::{
+        gateway::Ready,
+        id::{GuildId, UserId},
+    },
+    prelude::*,
+};
+use std::{
+    env,
+    thread,
+    time::{
+        Duration,
+        Instant
+    },
+};
+
 
 #[cfg(feature = "diesel")]
 mod db;

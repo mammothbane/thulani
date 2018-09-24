@@ -1,10 +1,7 @@
-cargo-features = ["edition"]
-
 [package]
 name = "thulani"
 version = "0.1.6"
 authors = ["Nathan Perry <avaglir@gmail.com>"]
-edition = "2018"
 
 [features]
 default = ["diesel"]
