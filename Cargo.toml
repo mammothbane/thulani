@@ -7,24 +7,24 @@ authors = ["Nathan Perry <avaglir@gmail.com>"]
 default = ["diesel"]
 
 [dependencies]
-lazy_static = "1.0"
-failure = "0.1"
-log = "0.4"
-typemap = "0.3"
-url = "1.6"
-dotenv = "0.11"
-dotenv_codegen = "0.11"
-chrono = "0.4"
-fern = { version = "0.5", features = ["colored"] }
-diesel = { version = "1.3", features = ["postgres", "chrono", "r2d2"], optional = true }
-ctrlc = { version = "3.0", features = ["termination"] }
-rand = "0.5"
-either = "1.5"
-reqwest = "0.8"
+lazy_static = "1.2.0"
+failure = "0.1.3"
+log = "0.4.6"
+typemap = "0.3.3"
+url = "1.7.2"
+dotenv = "0.13.0"
+dotenv_codegen = "0.11.0"
+chrono = "0.4.6"
+fern = { version = "0.5.7", features = ["colored"] }
+diesel = { version = "1.3.3", features = ["postgres", "chrono", "r2d2"], optional = true }
+ctrlc = { version = "3.1.1", features = ["termination"] }
+rand = "0.6.1"
+either = "1.5.0"
+reqwest = "0.9.5"
 sha1 = { version = "0.6.0", features = ["std"] }
-mime_guess = "1.8.4"
-regex = "0.2"
-clap = "2.31"
+mime_guess = "1.8.6"
+regex = "1.1.0"
+clap = "2.32.0"
 
 [dependencies.serenity]
 default-features = false
