@@ -1,21 +1,29 @@
 use std::sync::RwLock;
 
-use serenity::{
-    http::AttachmentType,
-    builder::CreateMessage,
-    framework::standard::Args,
-};
-
-use rand::{thread_rng, Rng};
 use diesel::PgConnection;
 use failure::Error;
 use lazy_static::lazy_static;
+use rand::{Rng, thread_rng};
+use serenity::{
+    builder::CreateMessage,
+    framework::standard::Args,
+    http::AttachmentType,
+    model::channel::Message,
+    prelude::*,
+};
 
-use super::*;
-use super::playback::CtxExt;
-
-use crate::db::*;
-use crate::Result;
+use crate::{
+    commands::{
+        playback::{
+            CtxExt,
+            PlayArgs,
+            PlayQueue,
+        },
+        send,
+    },
+    db::*,
+    Result,
+};
 
 lazy_static! {
     static ref LAST_MEME: RwLock<Option<i32>> = RwLock::new(None);
@@ -28,7 +36,7 @@ fn update_meme(meme: &Meme) -> Result<()> {
     Ok(())
 }
 
-pub fn meme(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+pub fn meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     if args.len() == 0 {
         return rand_meme(ctx, msg);
     }

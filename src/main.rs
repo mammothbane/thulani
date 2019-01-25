@@ -1,5 +1,4 @@
 #![feature(transpose_result)]
-#![feature(crate_in_paths)]
 
 extern crate chrono;
 #[cfg(feature = "diesel")]
@@ -19,14 +18,12 @@ extern crate typemap;
 extern crate url;
 
 use std::{
-    env,
     thread,
     time::{
         Duration,
         Instant
     },
 };
-
 
 use dotenv::dotenv;
 use failure::Error;
@@ -79,7 +76,7 @@ impl EventHandler for Handler {
 }
 
 fn run() -> Result<()> {
-    let token = &dotenv::var("THULANI_TOKEN").map_err(|e| format_err!("missing token"))?;
+    let token = &dotenv::var("THULANI_TOKEN").map_err(|_| format_err!("missing token"))?;
     let mut client = Client::new(token, Handler)?;
 
     commands::VoiceManager::register(&mut client);
@@ -97,7 +94,7 @@ fn run() -> Result<()> {
             .case_insensitivity(true)
         )
         .before(|_ctx, message, cmd| {
-            let result = message.guild_id().map_or(false, |x| x.0 == *TARGET_GUILD);
+            let result = message.guild_id.map_or(false, |x| x.0 == *TARGET_GUILD);
             debug!("got command '{}' from user '{}' ({}). accept: {}", cmd, message.author.name, message.author.id, result);
 
             result          

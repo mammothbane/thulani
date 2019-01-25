@@ -1,8 +1,11 @@
 use chrono::naive::NaiveDateTime;
 use diesel::prelude::*;
 
-use super::schema::*;
-use crate::{Result, Error};
+use crate::{
+    db::schema::*,
+    Error,
+    Result,
+};
 
 #[derive(Queryable, Identifiable, PartialEq, Debug)]
 #[table_name="memes"]

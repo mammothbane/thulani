@@ -1,11 +1,12 @@
 use either::{Left, Right};
 use serenity::{
-    voice::{LockedAudio, ytdl},
-    model::id::ChannelId,
     framework::standard::Args,
+    model::id::ChannelId,
+    voice::{LockedAudio, ytdl},
 };
 
 use super::*;
+
 pub use self::types::*;
 
 mod types;
@@ -24,7 +25,7 @@ impl CtxExt for Context {
 
     fn users_listening(&self) -> Result<bool> {
         let channel_id = ChannelId(must_env_lookup::<u64>("VOICE_CHANNEL"));
-        let channel = channel_id.get()?;
+        let channel = channel_id.to_channel()?;
         let res = channel.guild()
             .and_then(|ch| ch.read().guild())
             .map(|g| (&g.read().voice_states)

@@ -1,15 +1,17 @@
 use std::{
-    env,
     convert::AsRef,
+    env,
 };
 
 use diesel::{
+    NotFound,
     prelude::*,
     r2d2::{ConnectionManager, ManageConnection},
-    NotFound,
 };
+use diesel::sql_types;
 
-use super::{Result, Error};
+use crate::{Error, Result};
+
 pub use self::models::*;
 use self::schema::*;
 
@@ -124,5 +126,4 @@ pub fn rand_audio(conn: &PgConnection) -> Result<Meme> {
         .map_err(Error::from)
 }
 
-use diesel::sql_types;
 no_arg_sql_function!(random, sql_types::Double, "SQL random() function");

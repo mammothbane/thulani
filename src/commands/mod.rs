@@ -4,22 +4,24 @@ use std::{
 };
 
 use serenity::{
-    prelude::*,
     framework::StandardFramework,
     model::{
         channel::Message,
-        id::MessageId,
+        id::ChannelId,
     },
+    prelude::*,
 };
 
 use crate::{must_env_lookup, Result, TARGET_GUILD_ID};
 
+#[cfg(feature = "diesel")]
+pub use self::meme::*;
+pub use self::playback::*;
+pub use self::sound::*;
+
 mod playback;
 mod sound;
 mod roll;
-
-pub use self::sound::*;
-pub use self::playback::*;
 
 pub fn register_commands(f: StandardFramework) -> StandardFramework {
     let f: StandardFramework = register_db(f);
@@ -82,9 +84,6 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
 
 #[cfg(feature = "diesel")]
 mod meme;
-
-#[cfg(feature = "diesel")]
-pub use self::meme::*;
 
 #[cfg(feature = "diesel")]
 fn register_db(f: StandardFramework) -> StandardFramework {

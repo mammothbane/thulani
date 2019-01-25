@@ -1,14 +1,15 @@
+use rand::prelude::*;
+use regex::Regex;
 use serenity::{
-    prelude::*,
     framework::standard::Args,
     model::channel::Message,
+    prelude::*,
 };
-use regex::Regex;
-use rand::prelude::*;
 
-use crate::Result;
-
-use super::send;
+use crate::{
+    commands::send,
+    Result,
+};
 
 lazy_static! {
     static ref ROLL_REGEX: Regex = Regex::new(r"([0-9]+)?(?:d([0-9]+)(?:\s+\+\s+([0-9]+))?)")
