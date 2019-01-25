@@ -1,7 +1,10 @@
+use std::{
+    sync::{Arc, RwLock},
+    collections::VecDeque,
+};
+
 use serenity::client::bridge::voice::ClientVoiceManager;
 use typemap::Key;
-use std::sync::{Arc, RwLock};
-use std::collections::VecDeque;
 
 use either::{Either, Left, Right};
 

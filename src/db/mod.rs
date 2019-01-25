@@ -1,9 +1,13 @@
-use std::env;
-use std::convert::AsRef;
+use std::{
+    env,
+    convert::AsRef,
+};
 
-use diesel::prelude::*;
-use diesel::r2d2::{ConnectionManager, ManageConnection};
-use diesel::NotFound;
+use diesel::{
+    prelude::*,
+    r2d2::{ConnectionManager, ManageConnection},
+    NotFound,
+};
 
 use super::{Result, Error};
 pub use self::models::*;

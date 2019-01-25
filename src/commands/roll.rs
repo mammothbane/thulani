@@ -1,6 +1,8 @@
-use serenity::prelude::*;
-use serenity::framework::standard::Args;
-use serenity::model::channel::Message;
+use serenity::{
+    prelude::*,
+    framework::standard::Args,
+    model::channel::Message,
+};
 use regex::Regex;
 use rand::prelude::*;
 

@@ -1,5 +1,7 @@
-use std::env;
-use std::str::FromStr;
+use std::{
+    env,
+    str::FromStr,
+};
 
 use serenity::model::permissions::Permissions;
 use url::Url;

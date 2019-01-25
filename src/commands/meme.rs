@@ -1,10 +1,14 @@
+use std::sync::RwLock;
+
+use serenity::{
+    http::AttachmentType,
+    builder::CreateMessage,
+    framework::standard::Args,
+};
+
 use rand::{thread_rng, Rng};
-use serenity::http::AttachmentType;
-use serenity::builder::CreateMessage;
-use serenity::framework::standard::Args;
 use diesel::PgConnection;
 use failure::Error;
-use std::sync::RwLock;
 use lazy_static::lazy_static;
 
 use super::*;

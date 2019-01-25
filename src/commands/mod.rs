@@ -1,10 +1,18 @@
+use std::{
+    thread,
+    time::Duration,
+};
+
+use serenity::{
+    prelude::*,
+    framework::StandardFramework,
+    model::{
+        channel::Message,
+        id::MessageId,
+    },
+};
+
 use crate::{must_env_lookup, Result, TARGET_GUILD_ID};
-use serenity::framework::StandardFramework;
-use serenity::model::channel::Message;
-use serenity::model::id::ChannelId;
-use serenity::prelude::*;
-use std::thread;
-use std::time::Duration;
 
 mod playback;
 mod sound;

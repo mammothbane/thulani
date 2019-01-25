@@ -18,10 +18,18 @@ extern crate sha1;
 extern crate typemap;
 extern crate url;
 
+use std::{
+    env,
+    thread,
+    time::{
+        Duration,
+        Instant
+    },
+};
+
+
 use dotenv::dotenv;
 use failure::Error;
-use self::commands::register_commands;
-pub use self::util::*;
 use serenity::{
     framework::{
         standard::help_commands,
@@ -33,15 +41,9 @@ use serenity::{
     },
     prelude::*,
 };
-use std::{
-    env,
-    thread,
-    time::{
-        Duration,
-        Instant
-    },
-};
 
+use self::commands::register_commands;
+pub use self::util::*;
 
 #[cfg(feature = "diesel")]
 mod db;
