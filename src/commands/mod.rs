@@ -1,18 +1,9 @@
-use std::{
-    thread,
-    time::Duration,
-};
-
 use serenity::{
     framework::StandardFramework,
-    model::{
-        channel::Message,
-        id::ChannelId,
-    },
-    prelude::*,
+    model::id::ChannelId,
 };
 
-use crate::{must_env_lookup, Result, TARGET_GUILD_ID};
+use crate::Result;
 
 #[cfg(feature = "diesel")]
 pub use self::meme::*;

@@ -1,14 +1,27 @@
 use std::{
-    sync::{Arc, RwLock},
     collections::VecDeque,
+    sync::{Arc, RwLock},
+    thread,
+    time::Duration,
 };
 
-use serenity::client::bridge::voice::ClientVoiceManager;
+use either::{Either, Left, Right};
+use serenity::{
+    client::bridge::voice::ClientVoiceManager,
+    model::id::ChannelId,
+    prelude::*,
+    voice::{LockedAudio, ytdl},
+};
 use typemap::Key;
 
-use either::{Either, Left, Right};
-
-use super::*;
+use crate::{
+    commands::{
+        send,
+        sound::DEFAULT_VOLUME
+    },
+    must_env_lookup,
+    TARGET_GUILD_ID,
+};
 
 pub struct VoiceManager;
 
