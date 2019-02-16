@@ -218,6 +218,8 @@ fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Res
             initiator: msg.author.name.clone(),
             data: ::either::Right(audio.data.clone()),
             sender_channel: msg.channel_id,
+            start: None,
+            end: None,
         });
     }
 

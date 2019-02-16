@@ -1,4 +1,4 @@
-#![feature(transpose_result)]
+#![feature(impl_trait_in_bindings)]
 
 extern crate chrono;
 #[cfg(feature = "diesel")]
@@ -16,6 +16,9 @@ extern crate serenity;
 extern crate sha1;
 extern crate typemap;
 extern crate url;
+#[macro_use] extern crate itertools;
+extern crate time;
+extern crate serde_json;
 
 use std::{
     thread,
