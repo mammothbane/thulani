@@ -3,6 +3,15 @@ use std::{
     sync::{Arc, RwLock},
     thread,
     time::Duration,
+    io::{
+        Read,
+        Result as IoResult,
+    },
+    process::{
+        Command,
+        Stdio,
+        Child,
+    }
 };
 
 use chrono::Duration as CDuration;
@@ -11,9 +20,14 @@ use serenity::{
     client::bridge::voice::ClientVoiceManager,
     model::id::ChannelId,
     prelude::*,
-    voice::{LockedAudio},
+    voice::{
+        LockedAudio,
+        AudioSource,
+        pcm,
+    },
 };
 use typemap::Key;
+use serde_json::Value;
 
 use crate::{
     commands::{
@@ -22,6 +36,7 @@ use crate::{
     },
     must_env_lookup,
     TARGET_GUILD_ID,
+    Result,
 };
 
 pub struct VoiceManager;
@@ -164,28 +179,7 @@ impl PlayQueue {
     }
 }
 
-use std::{
-    io::{
-        Read,
-        Result as IoResult,
-        BufReader,
-    },
-    process::{
-        Command,
-        Stdio,
-        Child,
-    }
-};
-
-use serenity::{
-    voice::{
-        AudioSource,
-        pcm,
-    }
-};
-use serde_json::Value;
-use crate::Result;
-
+// Copied from serenity
 struct ChildContainer(Child);
 
 impl Read for ChildContainer {
@@ -202,8 +196,6 @@ impl Drop for ChildContainer {
     }
 }
 
-
-// Copied from serenity
 pub fn ytdl(uri: &str, start: Option<CDuration>, end: Option<CDuration>) -> Result<Box<AudioSource>> {
     let args = [
         "-f",
