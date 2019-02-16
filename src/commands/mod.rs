@@ -8,11 +8,11 @@ use crate::Result;
 #[cfg(feature = "diesel")]
 pub use self::meme::*;
 pub use self::playback::*;
-pub use self::sound::*;
+pub use self::sound_levels::*;
 
-mod playback;
-mod sound;
-mod roll;
+pub(crate) mod playback;
+pub(crate) mod sound_levels;
+pub(crate) mod roll;
 
 pub fn register_commands(f: StandardFramework) -> StandardFramework {
     let f: StandardFramework = register_db(f);
@@ -114,8 +114,7 @@ fn register_db(f: StandardFramework) -> StandardFramework {
     f
 }
 
-fn send<A: AsRef<str>>(channel: ChannelId, text: A, tts: bool) -> Result<()> {
+pub(crate) fn send<A: AsRef<str>>(channel: ChannelId, text: A, tts: bool) -> Result<()> {
     channel.send_message(|m| m.content(text.as_ref()).tts(tts))?;
     Ok(())
 }
-

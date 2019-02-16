@@ -50,6 +50,7 @@ mod db;
 
 mod commands;
 mod util;
+mod audio;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
@@ -82,8 +83,8 @@ fn run() -> Result<()> {
     let token = &dotenv::var("THULANI_TOKEN").map_err(|_| format_err!("missing token"))?;
     let mut client = Client::new(token, Handler)?;
 
-    commands::VoiceManager::register(&mut client);
-    commands::PlayQueue::register(&mut client);
+    audio::VoiceManager::register(&mut client);
+    audio::PlayQueue::register(&mut client);
 
     let owner_id = must_env_lookup::<u64>("OWNER_ID");
     let mut framework = StandardFramework::new()

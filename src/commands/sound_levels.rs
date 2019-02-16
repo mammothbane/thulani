@@ -2,12 +2,11 @@ use serenity::{
     framework::standard::Args,
     model::channel::Message,
     prelude::*,
-
 };
 
 use crate::{
+    audio::{PlayQueue, VoiceManager},
     commands::{
-        playback::{PlayQueue, VoiceManager},
         send,
     },
     Result,

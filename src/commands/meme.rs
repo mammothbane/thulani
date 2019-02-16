@@ -13,12 +13,12 @@ use serenity::{
 };
 
 use crate::{
+    audio::{
+        CtxExt,
+        PlayArgs,
+        PlayQueue,
+    },
     commands::{
-        playback::{
-            CtxExt,
-            PlayArgs,
-            PlayQueue,
-        },
         send,
     },
     db::*,
