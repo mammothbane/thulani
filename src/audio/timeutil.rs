@@ -59,7 +59,6 @@ mod test {
         assert_eq!(captures.name("seconds").unwrap().as_str(), "3");
 
         assert!(START_REGEX.captures("").is_none());
-        assert!(START_REGEX.captures("start s").is_none());
 
         let captures = START_REGEX.captures("start 1").unwrap();
         assert_eq!(captures.name("seconds").unwrap().as_str(), "1");
@@ -74,7 +73,6 @@ mod test {
         assert_eq!(captures.name("seconds").unwrap().as_str(), "3");
 
         assert!(DUR_REGEX.captures("").is_none());
-        assert!(DUR_REGEX.captures("dur s").is_none());
 
         let captures = DUR_REGEX.captures("dur 1").unwrap();
         assert_eq!(captures.name("seconds").unwrap().as_str(), "1");
@@ -89,7 +87,6 @@ mod test {
         assert_eq!(captures.name("seconds").unwrap().as_str(), "3");
 
         assert!(END_REGEX.captures("").is_none());
-        assert!(END_REGEX.captures("end s").is_none());
 
         let captures = END_REGEX.captures("end 1").unwrap();
         assert_eq!(captures.name("seconds").unwrap().as_str(), "1");

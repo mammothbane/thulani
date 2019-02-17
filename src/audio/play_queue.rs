@@ -103,10 +103,9 @@ impl PlayQueue {
                         }
                     },
                     Right(ref vec) => {
-                        ::serenity::voice::opus(true, ::std::io::Cursor::new(vec.clone()))
+                        ::serenity::voice::pcm(true, ::std::io::Cursor::new(vec.clone()))
                     }
                 };
-
 
                 let mut manager = voice_manager.lock();
                 let handler = manager.join(*TARGET_GUILD_ID, must_env_lookup::<u64>("VOICE_CHANNEL"));

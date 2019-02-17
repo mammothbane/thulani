@@ -42,7 +42,7 @@ impl Drop for ChildContainer {
     }
 }
 
-pub fn ytdl(uri: &str, start: Option<Duration>, end: Option<Duration>) -> Result<Box<AudioSource>> {
+pub fn ytdl_reader(uri: &str, start: Option<Duration>, end: Option<Duration>) -> Result<Box<dyn Read + Send>> {
     let args = [
         "-f",
         "webm[abr>0]/bestaudio/best",
@@ -113,5 +113,10 @@ pub fn ytdl(uri: &str, start: Option<Duration>, end: Option<Duration>) -> Result
         .stdout(Stdio::piped())
         .spawn()?;
 
-    Ok(pcm(true, ChildContainer(command)))
+    Ok(Box::new(ChildContainer(command)))
+}
+
+pub fn ytdl(uri: &str, start: Option<Duration>, end: Option<Duration>) -> Result<Box<AudioSource>> {
+    let command = ytdl_reader(uri, start, end)?;
+    Ok(pcm(true, command))
 }

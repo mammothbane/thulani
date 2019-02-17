@@ -16,7 +16,7 @@ extern crate serenity;
 extern crate sha1;
 extern crate typemap;
 extern crate url;
-#[macro_use] extern crate itertools;
+#[cfg_attr(test, macro_use)] extern crate itertools;
 extern crate time;
 extern crate serde_json;
 

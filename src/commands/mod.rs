@@ -88,6 +88,11 @@ fn register_db(f: StandardFramework) -> StandardFramework {
             .desc("first argument is title, everything after is text. one attached image is included if present.")
             .cmd(addmeme)
         )
+        .command("addaudiomeme", |c| c
+            .guild_only(true)
+            .desc("title, audio link, text, with optional image")
+            .cmd(addaudiomeme)
+        )
         .command("delmeme", |c| c
             .guild_only(true)
             .desc("delete a meme by name (exact match only)")

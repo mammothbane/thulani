@@ -19,7 +19,7 @@ use crate::{
 };
 
 pub use self::timeutil::parse_times;
-pub use self::ytdl::ytdl;
+pub use self::ytdl::*;
 pub use self::play_queue::PlayQueue;
 
 mod timeutil;

@@ -1,9 +1,13 @@
-use std::sync::RwLock;
+use std::{
+    io::{BufReader, Read},
+    sync::RwLock,
+};
 
 use diesel::PgConnection;
 use failure::Error;
 use lazy_static::lazy_static;
 use rand::{Rng, thread_rng};
+use url::Url;
 use serenity::{
     builder::CreateMessage,
     framework::standard::Args,
@@ -17,6 +21,8 @@ use crate::{
         CtxExt,
         PlayArgs,
         PlayQueue,
+        ytdl_reader,
+        parse_times,
     },
     commands::{
         send,
@@ -128,6 +134,59 @@ pub fn addmeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     msg.react("👌")
 }
 
+pub fn addaudiomeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+    let title = args.single_quoted::<String>()?;
+    let audio_str = args.single_quoted::<String>()?;
+
+    let elems = audio_str.split_whitespace().collect::<Vec<_>>();
+
+    if elems.len() == 0 {
+        return Err(::failure::err_msg("no audio link was provided"))
+    }
+
+    let audio_link = Url::parse(elems[0])?;
+    let opts = elems[1..].join(" ");
+    let (start, end) = parse_times(opts);
+
+    let audio_reader = BufReader::new(ytdl_reader(audio_link.as_str(), start, end)?);
+
+    let text = match args.multiple_quoted::<String>() {
+        Ok(text) => text.join(" "),
+        Err(_) => "".to_owned(),
+    };
+
+    let text = if text.is_empty() { None } else { Some(text) };
+
+    let conn = connection()?;
+
+    let image = msg.attachments.first()
+        .ok_or(::failure::err_msg("no attachment"))
+        .and_then(|att| {
+            let data = att.download()?;
+            Image::create(&conn, &att.filename, data, msg.author.id.0)
+        })
+        .ok();
+
+    let mut audio_data = Vec::new();
+    audio_reader.take(5 * 1024 * 1024).read_to_end(&mut audio_data)?;
+
+    if audio_data.len() == 0 {
+        return send(msg.channel_id, "🔇🔇🔇🔕🔕🔕🔕🔕🔇🔕🔕🔇🔕🔕📣📢📣📢📣", msg.tts);
+    }
+
+    let audio_id = Audio::create(&conn, audio_data, msg.author.id.0)?;
+
+    NewMeme {
+        title,
+        content: text,
+        image_id: image,
+        audio_id: Some(audio_id),
+        metadata_id: 0,
+    }.save(&conn, msg.author.id.0).map(|_| {})?;
+
+    msg.react("👌")
+}
+
 pub fn delmeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     let title = args.single_quoted::<String>()?;
 
@@ -194,16 +253,19 @@ fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Res
 
         match t.content {
             Some(ref text) => ret.content(text),
-            None => ret
+            None => ret,
         }
     };
 
     match image {
         Some(image) => {
             let image = image?;
-            msg.channel_id.send_files(vec!(AttachmentType::Bytes((&image.data, &image.filename))), create_msg)?
+            msg.channel_id.send_files(vec!(AttachmentType::Bytes((&image.data, &image.filename))), create_msg)?;
         },
-        None => msg.channel_id.send_message(create_msg)?,
+        None => match t.content {
+            Some(_) => { msg.channel_id.send_message(create_msg)?; },
+            None => {},
+        },
     };
 
     // note: slight edge-case race condition here: there could have been something queued since we
