@@ -40,7 +40,12 @@ pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
     });
 
     if host.map(|h| h.to_lowercase().contains("imgur")).unwrap_or(false) {
-        send(msg.channel_id, "IMGUR IS BAD, YOU TRASH CAN MAN", msg.tts)?;
+        if msg.author.id.0 == 106160362109272064 {
+            send(msg.channel_id, "fuck you conway", true)?;
+        } else {
+            send(msg.channel_id, "IMGUR IS BAD, YOU TRASH CAN MAN", msg.tts)?;
+        }
+
         return Ok(());
     }
 
