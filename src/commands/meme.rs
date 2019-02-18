@@ -103,12 +103,11 @@ pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
     meme.map(|_| {})
 }
 
-pub fn addmeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+pub fn addmeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
+    let mut args = Args::new(args.rest(), &[" ".to_owned(), "\n".to_owned(), "\t".to_owned()]);
+
     let title = args.single_quoted::<String>()?;
-    let text = match args.multiple_quoted::<String>() {
-        Ok(text) => text.join(" "),
-        Err(_) => "".to_owned(),
-    };
+    let text = args.rest().to_owned();
 
     let text = if text.is_empty() { None } else { Some(text) };
 
@@ -137,7 +136,9 @@ pub fn addmeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     msg.react("👌")
 }
 
-pub fn addaudiomeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+pub fn addaudiomeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
+    let mut args = Args::new(args.rest(), &[" ".to_owned(), "\n".to_owned(), "\t".to_owned()]);
+
     let title = args.single_quoted::<String>()?;
     let audio_str = args.single_quoted::<String>()?;
 
@@ -186,11 +187,7 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()
 
     let mut audio_reader = ffmpeg_command.stdout.unwrap();
 
-    let text = match args.multiple_quoted::<String>() {
-        Ok(text) => text.join(" "),
-        Err(_) => "".to_owned(),
-    };
-
+    let text = args.rest().to_owned();
     let text = if text.is_empty() { None } else { Some(text) };
 
     let conn = connection()?;

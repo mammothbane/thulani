@@ -1,5 +1,6 @@
 #![feature(impl_trait_in_bindings)]
 #![feature(try_trait)]
+#![feature(pattern)]
 
 extern crate chrono;
 #[cfg(feature = "diesel")]
@@ -97,7 +98,6 @@ fn run() -> Result<()> {
             .on_mention(false)
             .owners(vec![UserId(owner_id)].into_iter().collect())
             .case_insensitivity(true)
-            .delimiter("\n")
             .delimiter("\t")
         )
         .before(|_ctx, message, cmd| {
