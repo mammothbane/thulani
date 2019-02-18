@@ -6,15 +6,14 @@ use std::{
         Result as IoResult,
     },
     process::{
+        Child,
         Command,
         Stdio,
-        Child,
     },
 };
 
 use chrono::Duration;
 use serde_json::Value;
-
 use serenity::{
     voice::{
         AudioSource,
@@ -25,7 +24,6 @@ use serenity::{
 
 use crate::Result;
 
-
 struct ChildContainer(Child);
 
 impl Read for ChildContainer {
@@ -35,14 +33,53 @@ impl Read for ChildContainer {
 }
 
 impl Drop for ChildContainer {
-    fn drop (&mut self) {
+    fn drop(&mut self) {
         if let Err(e) = self.0.kill() {
-            debug!("[Voice] Error awaiting child process: {:?}", e);
+            debug!("Error awaiting child process: {:?}", e);
         }
     }
 }
 
-pub fn ytdl_reader(uri: &str, start: Option<Duration>, end: Option<Duration>) -> Result<Box<dyn Read + Send>> {
+pub(crate) trait CodecInfo {
+    fn ffmpeg_opts() -> &'static[&'static str];
+}
+
+pub(crate) struct Pcm {}
+pub(crate) struct Opus {}
+
+impl CodecInfo for Pcm {
+    #[inline]
+    fn ffmpeg_opts() -> &'static[&'static str] {
+        lazy_static! {
+            static ref OPTS: Vec<&'static str> = vec! [
+                "-f", "s16le",
+                "-acodec", "pcm_s16le",
+            ];
+        }
+
+        &*OPTS
+    }
+}
+
+impl CodecInfo for Opus {
+    #[inline]
+    fn ffmpeg_opts() -> &'static[&'static str] {
+        lazy_static! {
+            static ref OPTS: Vec<&'static str> = vec! [
+//                "-f", "s16le",
+                "-acodec", "libopus",
+                "-sample_fmt", "s16",
+                "-vbr", "off",
+//                "-b:a 96k",
+//                "-vn",
+            ];
+        }
+
+        &*OPTS
+    }
+}
+
+pub fn ytdl_url(uri: &str) -> Result<String> {
     let args = [
         "-f",
         "webm[abr>0]/bestaudio/best",
@@ -67,26 +104,24 @@ pub fn ytdl_reader(uri: &str, start: Option<Duration>, end: Option<Duration>) ->
         other => return Err(VoiceError::YouTubeDLProcessing(other).into()),
     };
 
-    let uri = match obj.remove("url") {
+    match obj.remove("url") {
         Some(v) => match v {
-            Value::String(uri) => uri,
-            other => return Err(VoiceError::YouTubeDLUrl(other).into()),
+            Value::String(uri) => Ok(uri),
+            other => Err(VoiceError::YouTubeDLUrl(other).into()),
         },
-        None => return Err(VoiceError::YouTubeDLUrl(Value::Object(obj)).into()),
-    };
+        None => Err(VoiceError::YouTubeDLUrl(Value::Object(obj)).into()),
+    }
+}
 
+pub(crate) fn ffmpeg_dl<T: CodecInfo>(uri: &str, start: Option<Duration>, end: Option<Duration>, size_limit: Option<usize>) -> Result<Box<dyn Read + Send>> {
     let start = start.unwrap_or(Duration::zero());
     let start_str = format!("{:02}:{:02}:{:02}", start.num_hours(), start.num_minutes() % 60, start.num_seconds() % 60);
 
     let mut opts = vec! [
-        "-f",
-        "s16le",
         "-ac",
         "2", // force stereo -- this may cause issues
         "-ar",
         "48000",
-        "-acodec",
-        "pcm_s16le",
         "-ss",
         &start_str,
     ]
@@ -94,21 +129,28 @@ pub fn ytdl_reader(uri: &str, start: Option<Duration>, end: Option<Duration>) ->
         .map(|s| s.to_owned())
         .collect::<Vec<_>>();
 
-    match end {
-        Some(e) => {
-            opts.push("-to".to_owned());
-            opts.push(format!("{:02}:{:02}:{:02}", e.num_hours(), e.num_minutes() % 60, e.num_seconds() % 60));
-        },
-        _ => {},
+    let codec_opts = T::ffmpeg_opts().into_iter().map(|&s| s.to_owned()).collect::<Vec<_>>();
+    opts.extend(codec_opts);
+
+    if let Some(limit) = size_limit {
+        opts.push("-fs".to_owned());
+        opts.push(format!("{}", limit));
+    }
+
+    if let Some(e) = end {
+        opts.push("-to".to_owned());
+        opts.push(format!("{:02}:{:02}:{:02}", e.num_hours(), e.num_minutes() % 60, e.num_seconds() % 60));
     }
 
     opts.push("-".to_owned());
+
+    debug!("ffmpeg -i \"{}\" {}", uri, opts.join(" "));
 
     let command = Command::new("ffmpeg")
         .arg("-i")
         .arg(uri)
         .args(opts)
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .spawn()?;
@@ -117,6 +159,7 @@ pub fn ytdl_reader(uri: &str, start: Option<Duration>, end: Option<Duration>) ->
 }
 
 pub fn ytdl(uri: &str, start: Option<Duration>, end: Option<Duration>) -> Result<Box<AudioSource>> {
-    let command = ytdl_reader(uri, start, end)?;
+    let youtube_uri = ytdl_url(uri)?;
+    let command = ffmpeg_dl::<Pcm>(&youtube_uri, start, end, None)?;
     Ok(pcm(true, command))
 }

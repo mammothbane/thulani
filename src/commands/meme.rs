@@ -5,9 +5,12 @@ use std::{
 
 use diesel::PgConnection;
 use failure::Error;
+use flate2::{
+    bufread::DeflateEncoder,
+    Compression,
+};
 use lazy_static::lazy_static;
 use rand::{Rng, thread_rng};
-use url::Url;
 use serenity::{
     builder::CreateMessage,
     framework::standard::Args,
@@ -15,18 +18,21 @@ use serenity::{
     model::channel::Message,
     prelude::*,
 };
+use url::Url;
+
+use audio::ytdl_url;
 
 use crate::{
     audio::{
         CtxExt,
+        ffmpeg_dl,
+        Opus,
+        parse_times,
+        Pcm,
         PlayArgs,
         PlayQueue,
-        ytdl_reader,
-        parse_times,
     },
-    commands::{
-        send,
-    },
+    commands::send,
     db::*,
     Result,
 };
@@ -148,7 +154,11 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()
     let opts = elems[1..].join(" ");
     let (start, end) = parse_times(opts);
 
-    let audio_reader = BufReader::new(ytdl_reader(audio_link.as_str(), start, end)?);
+    let youtube_url = ytdl_url(audio_link.as_str())?;
+    let mut audio_reader = DeflateEncoder::new(
+        BufReader::new(ffmpeg_dl::<Pcm>(&youtube_url, start, end, None)?),
+        Compression::best(),
+    );
 
     let text = match args.multiple_quoted::<String>() {
         Ok(text) => text.join(" "),
@@ -168,9 +178,10 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()
         .ok();
 
     let mut audio_data = Vec::new();
-    audio_reader.take(5 * 1024 * 1024).read_to_end(&mut audio_data)?;
+    let bytes = audio_reader.read_to_end(&mut audio_data)?;
 
-    if audio_data.len() == 0 {
+    if bytes == 0 {
+        debug!("read 0 bytes from audio reader");
         return send(msg.channel_id, "🔇🔇🔇🔕🔕🔕🔕🔕🔇🔕🔕🔇🔕🔕📣📢📣📢📣", msg.tts);
     }
 

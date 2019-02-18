@@ -8,17 +8,18 @@ extern crate dotenv;
 extern crate either;
 #[macro_use] extern crate failure;
 extern crate fern;
+extern crate flate2;
+#[cfg_attr(test, macro_use)] extern crate itertools;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 extern crate rand;
 extern crate regex;
+extern crate serde_json;
 extern crate serenity;
 extern crate sha1;
+extern crate time;
 extern crate typemap;
 extern crate url;
-#[cfg_attr(test, macro_use)] extern crate itertools;
-extern crate time;
-extern crate serde_json;
 
 use std::{
     thread,

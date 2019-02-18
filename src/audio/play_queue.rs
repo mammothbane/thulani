@@ -1,13 +1,18 @@
 use std::{
+    collections::VecDeque,
+    io::Cursor,
     sync::{Arc, RwLock},
     thread,
-    collections::VecDeque,
     time::Duration,
 };
 
-use typemap::Key;
 use either::{Left, Right};
-use serenity::prelude::*;
+use flate2::bufread::DeflateDecoder;
+use serenity::{
+    prelude::*,
+    voice,
+};
+use typemap::Key;
 
 use crate::{
     audio::{
@@ -16,8 +21,8 @@ use crate::{
         ytdl,
     },
     commands::{
-        sound_levels::DEFAULT_VOLUME,
         send,
+        sound_levels::DEFAULT_VOLUME,
     },
     must_env_lookup,
     TARGET_GUILD_ID,
@@ -103,7 +108,7 @@ impl PlayQueue {
                         }
                     },
                     Right(ref vec) => {
-                        ::serenity::voice::pcm(true, ::std::io::Cursor::new(vec.clone()))
+                        voice::pcm(true, DeflateDecoder::new(Cursor::new(vec.clone())))
                     }
                 };
 
