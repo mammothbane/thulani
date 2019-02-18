@@ -3,13 +3,19 @@ use std::{
     sync::RwLock,
 };
 
+use byteorder::{
+    ByteOrder,
+    NativeEndian,
+};
 use diesel::PgConnection;
 use failure::Error;
-use flate2::{
-    bufread::DeflateEncoder,
-    Compression,
-};
 use lazy_static::lazy_static;
+use opus::{
+    Application,
+    Bitrate,
+    Channels,
+    Encoder as OpusEncoder,
+};
 use rand::{Rng, thread_rng};
 use serenity::{
     builder::CreateMessage,
@@ -26,7 +32,6 @@ use crate::{
     audio::{
         CtxExt,
         ffmpeg_dl,
-        Opus,
         parse_times,
         Pcm,
         PlayArgs,
@@ -155,10 +160,7 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()
     let (start, end) = parse_times(opts);
 
     let youtube_url = ytdl_url(audio_link.as_str())?;
-    let mut audio_reader = DeflateEncoder::new(
-        BufReader::new(ffmpeg_dl::<Pcm>(&youtube_url, start, end, None)?),
-        Compression::best(),
-    );
+    let mut audio_reader = BufReader::new(ffmpeg_dl::<Pcm>(&youtube_url, start, end, None)?);
 
     let text = match args.multiple_quoted::<String>() {
         Ok(text) => text.join(" "),
@@ -177,15 +179,44 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()
         })
         .ok();
 
-    let mut audio_data = Vec::new();
-    let bytes = audio_reader.read_to_end(&mut audio_data)?;
+    let i16_data: Vec<i16> = {
+        let mut audio_data = Vec::new();
+        let bytes = audio_reader.read_to_end(&mut audio_data)?;
 
-    if bytes == 0 {
+        let mut i16_data = Vec::with_capacity(bytes / 2);
+        i16_data.resize(bytes / 2, 0);
+
+        NativeEndian::read_i16_into(&audio_data, &mut i16_data);
+
+        i16_data
+    };
+
+    let mut enc = OpusEncoder::new(48000, Channels::Stereo, Application::Audio)?;
+    enc.set_vbr(false)?;
+    enc.set_bitrate(Bitrate::Bits(96 * 1024))?;
+
+    let mut out = Vec::new();
+    for elem in i16_data.chunks(960) {
+        let elem = if elem.len() == 960 {
+            elem
+        } else if elem.len() > 480 {
+            &elem[..480]
+        } else if elem.len() > 240 {
+            &elem[..240]
+        } else {
+            continue
+        };
+
+        let mut encoded = enc.encode_vec(elem, 1200)?;
+        out.append(&mut encoded);
+    }
+
+    if out.len() == 0 {
         debug!("read 0 bytes from audio reader");
         return send(msg.channel_id, "🔇🔇🔇🔕🔕🔕🔕🔕🔇🔕🔕🔇🔕🔕📣📢📣📢📣", msg.tts);
     }
 
-    let audio_id = Audio::create(&conn, audio_data, msg.author.id.0)?;
+    let audio_id = Audio::create(&conn, out, msg.author.id.0)?;
 
     NewMeme {
         title,

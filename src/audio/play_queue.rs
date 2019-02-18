@@ -7,7 +7,10 @@ use std::{
 };
 
 use either::{Left, Right};
-use flate2::bufread::DeflateDecoder;
+use opus::{
+    Channels,
+    Decoder as OpusDecoder,
+};
 use serenity::{
     prelude::*,
     voice,
@@ -59,6 +62,7 @@ impl PlayQueue {
         thread::spawn(move || {
             let queue_lck = Arc::clone(&queue);
             let voice_manager = voice_manager;
+            let mut opus_dec = OpusDecoder::new(48000, Channels::Stereo).unwrap();
 
             loop {
                 thread::sleep(Duration::from_millis(250));
@@ -107,8 +111,24 @@ impl PlayQueue {
                             }
                         }
                     },
-                    Right(ref vec) => {
-                        voice::pcm(true, DeflateDecoder::new(Cursor::new(vec.clone())))
+                    Right(ref v) => {
+                        let mut out = Vec::new();
+
+                        let mut acc: usize = 0;
+                        while acc < v.len() {
+                            dbg!(acc);
+                            let mut wr = vec![0i16; 960];
+                            match opus_dec.decode(&v[acc..], &mut wr, true) {
+                                Ok(len) => acc += len,
+
+                                Err(e) => {
+                                    info!("decoding opus packet: {}", e);
+                                    break;
+                                },
+                            }
+                        }
+
+                        voice::pcm(true, Cursor::new(out))
                     }
                 };
 
