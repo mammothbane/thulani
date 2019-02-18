@@ -9,6 +9,7 @@ use std::{
 
 use either::{Left, Right};
 use serenity::{
+    client::bridge::voice::ClientVoiceManager,
     prelude::*,
     voice,
 };
@@ -25,6 +26,7 @@ use crate::{
         sound_levels::DEFAULT_VOLUME,
     },
     must_env_lookup,
+    Result,
     TARGET_GUILD_ID,
 };
 
@@ -57,58 +59,66 @@ impl PlayQueue {
         data.insert::<PlayQueue>(Arc::clone(&queue));
 
         thread::spawn(move || {
-            let queue_lck = Arc::clone(&queue);
-            let voice_manager = voice_manager;
-
             loop {
-                thread::sleep(Duration::from_millis(250));
-                let (queue_is_empty, queue_has_playing) = {
-                    let queue = queue_lck.read().unwrap();
-
-                    let allow_continue = queue.playing.clone().map_or(false, |x| !x.audio.lock().finished);
-
-                    if allow_continue {
-                        continue;
-                    }
-
-                    (queue.queue.is_empty(), queue.playing.is_some())
-                };
-
-                if queue_is_empty {
-                    if queue_has_playing {
-                        let mut queue = queue_lck.write().unwrap();
-
-                        assert!({
-                            let audio_lck = queue.playing.clone().unwrap().audio;
-                            let audio = audio_lck.lock();
-                            audio.finished
-                        });
-
-                        queue.playing = None;
-
-                        let mut manager = voice_manager.lock();
-                        manager.leave(*TARGET_GUILD_ID);
-                        debug!("disconnected because playback finished");
-                    }
-                    continue;
+                if let Err(e) = Self::update(&queue, &voice_manager) {
+                    error!("updating playqueue: {}", e);
                 }
 
-                let mut queue = queue_lck.write().unwrap();
-                let mut item = queue.queue.pop_front().unwrap();
+                thread::sleep(Duration::from_millis(250));
+            }
+        });
+    }
 
-                let src = match &mut item.data {
+    fn update(queue_lck: &Arc<RwLock<Self>>, voice_manager: &Arc<Mutex<ClientVoiceManager>>) -> Result<()> {
+        let (queue_is_empty, queue_has_playing) = {
+            let queue = queue_lck.read().unwrap();
+
+            let allow_continue = queue.playing.clone().map_or(false, |x| !x.audio.lock().finished);
+
+            if allow_continue {
+                return Ok(());
+            }
+
+            (queue.queue.is_empty(), queue.playing.is_some())
+        };
+
+        if queue_is_empty {
+            if queue_has_playing {
+                let mut queue = queue_lck.write().unwrap();
+
+                assert!({
+                    let audio_lck = queue.playing.clone().unwrap().audio;
+                    let audio = audio_lck.lock();
+                    audio.finished
+                });
+
+                queue.playing = None;
+
+                let mut manager = voice_manager.lock();
+                manager.leave(*TARGET_GUILD_ID);
+                debug!("disconnected because playback finished");
+            }
+
+            return Ok(());
+        }
+
+        let mut queue = queue_lck.write().unwrap();
+        let mut item = queue.queue.pop_front().unwrap();
+
+        let src = match &mut item.data {
                     Left(ref url) => {
                         match ytdl(url, item.start, item.end) {
                             Ok(src) => src,
                             Err(e) => {
                                 error!("bad link: {}; {:?}", url, e);
-                                let _ = send(item.sender_channel, "what the fuck", false);
-                                continue;
-                            }
-                        }
-                    },
-                    Right(ref vec) => {
-                        let mut transcoder = process::Command::new("ffmpeg")
+                                let _ = send(item.sender_channel, "what the fuck", false)?;
+
+                        return Ok(());
+                    }
+                }
+            },
+            Right(ref vec) => {
+                let mut transcoder = process::Command::new("ffmpeg")
                             .args(&[
                                 "-format", "opus",
                                 "-i", "pipe:0",
@@ -154,33 +164,34 @@ impl PlayQueue {
                         let result = voice::pcm(true, stdout.unwrap());
 
                         result
-                    }
-                };
-
-                let mut manager = voice_manager.lock();
-                let handler = manager.join(*TARGET_GUILD_ID, must_env_lookup::<u64>("VOICE_CHANNEL"));
-
-                match handler {
-                    Some(handler) => {
-                        let audio = handler.play_only(src);
-                        {
-                            audio.lock().volume(queue.volume);
-                        }
-
-                        queue.playing = Some(CurrentItem {
-                            init_args: item,
-                            audio,
-                        });
-
-                        debug!("playing new song");
-                    },
-                    None => {
-                        error!("couldn't join channel");
-                        let _ = send(item.sender_channel, "something happened somewhere somehow.", false);
-                    }
-                }
             }
-        });
+        };
+
+        let mut manager = voice_manager.lock();
+        let handler = manager.join(*TARGET_GUILD_ID, must_env_lookup::<u64>("VOICE_CHANNEL"));
+
+        match handler {
+            Some(handler) => {
+                let audio = handler.play_only(src);
+                {
+                    audio.lock().volume(queue.volume);
+                }
+
+                queue.playing = Some(CurrentItem {
+                    init_args: item,
+                    audio,
+                });
+
+                debug!("playing new song");
+            },
+            None => {
+                error!("couldn't join channel");
+                send(item.sender_channel, "something happened somewhere somehow.", false)?;
+            }
+        }
+
+        Ok(())
     }
+
 }
 
