@@ -176,6 +176,7 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()
             "-f", "opus",
             "-acodec", "libopus",
             "-b:a", "96k",
+            "-fs", "5M",
             "-",
         ])
         .stdout(Stdio::piped())
