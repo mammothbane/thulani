@@ -1,5 +1,6 @@
 #![feature(impl_trait_in_bindings)]
 
+extern crate byteorder;
 extern crate chrono;
 #[cfg(feature = "diesel")]
 #[macro_use] extern crate diesel;
@@ -8,8 +9,8 @@ extern crate dotenv;
 extern crate either;
 #[macro_use] extern crate failure;
 extern crate fern;
-extern crate flate2;
 #[cfg_attr(test, macro_use)] extern crate itertools;
+extern crate lame_sys;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 extern crate rand;

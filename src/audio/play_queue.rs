@@ -1,13 +1,20 @@
 use std::{
     collections::VecDeque,
-    io::Cursor,
+    io::{self, Cursor},
+    iter,
+    process::{
+        Command,
+        Stdio,
+    },
     sync::{Arc, RwLock},
     thread,
     time::Duration,
 };
 
+use byteorder::{ByteOrder, NativeEndian};
 use either::{Left, Right};
-use flate2::bufread::DeflateDecoder;
+use itertools::Itertools;
+use lame_sys;
 use serenity::{
     prelude::*,
     voice,
@@ -94,9 +101,9 @@ impl PlayQueue {
                 }
 
                 let mut queue = queue_lck.write().unwrap();
-                let item = queue.queue.pop_front().unwrap();
+                let mut item = queue.queue.pop_front().unwrap();
 
-                let src = match item.data {
+                let src = match &mut item.data {
                     Left(ref url) => {
                         match ytdl(url, item.start, item.end) {
                             Ok(src) => src,
@@ -107,8 +114,54 @@ impl PlayQueue {
                             }
                         }
                     },
-                    Right(ref vec) => {
-                        voice::pcm(true, DeflateDecoder::new(Cursor::new(vec.clone())))
+                    Right(ref mut v) => {
+
+//                        let out = unsafe {
+//                            let hip_t = lame_sys::hip_decode_init();
+//
+//                            let mut pcm_l = vec![0; 5 * 1024 * 1024 / 2];
+//                            let mut pcm_r = vec![0; 5 * 1024 * 1024 / 2];
+//
+//                            let count = lame_sys::hip_decode(hip_t,
+//                                                 v.as_mut_ptr(),
+//                                                 v.len(),
+//                                                 pcm_l.as_mut_ptr(),
+//                                                 pcm_r.as_mut_ptr());
+//
+//                            lame_sys::hip_decode_exit(hip_t);
+//
+//                            pcm_l.into_iter()
+//                                .interleave(pcm_r.into_iter())
+//                                .flat_map(|x| {
+//                                    let mut b = vec![0u8; 2];
+//                                    NativeEndian::write_i16(&mut b, x);
+//
+//                                    b.into_iter()
+//                                })
+//                                .collect::<Vec<u8>>()
+//                        };
+
+                        let mut out = Command::new("lame")
+                            .args(&[
+                                "--decode", "-t",
+                                "-", "-",
+                            ])
+                            .stdin(Stdio::piped())
+                            .stdout(Stdio::piped())
+                            .stderr(Stdio::piped())
+                            .spawn()
+                            .unwrap();
+
+                        io::copy(&mut Cursor::new(v), &mut out.stdin.as_mut().unwrap());
+                        let result = voice::pcm(true,  Cursor::new("abc"));
+
+//                        out.stdout.as_mut().unwrap()
+
+                        let status = out.wait_with_output().unwrap();
+                        println!("{}", status.status);
+                        println!("{}", String::from_utf8(status.stderr).unwrap());
+
+                        result
                     }
                 };
 

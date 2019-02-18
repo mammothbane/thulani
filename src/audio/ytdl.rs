@@ -46,6 +46,7 @@ pub(crate) trait CodecInfo {
 
 pub(crate) struct Pcm {}
 pub(crate) struct Opus {}
+pub(crate) struct Mp3 {}
 
 impl CodecInfo for Pcm {
     #[inline]
@@ -72,6 +73,22 @@ impl CodecInfo for Opus {
                 "-vbr", "off",
 //                "-b:a 96k",
 //                "-vn",
+            ];
+        }
+
+        &*OPTS
+    }
+}
+
+impl CodecInfo for Mp3 {
+    #[inline]
+    fn ffmpeg_opts() -> &'static[&'static str] {
+        lazy_static! {
+            static ref OPTS: Vec<&'static str> = vec! [
+                "-f", "aac",
+                "-acodec", "libfdk_aac",
+                "-b:a", "96k",
+                "-sample_fmt", "s16",
             ];
         }
 
@@ -113,7 +130,7 @@ pub fn ytdl_url(uri: &str) -> Result<String> {
     }
 }
 
-pub(crate) fn ffmpeg_dl<T: CodecInfo>(uri: &str, start: Option<Duration>, end: Option<Duration>, size_limit: Option<usize>) -> Result<Box<dyn Read + Send>> {
+pub(crate) fn ffmpeg_dl<T: CodecInfo>(uri: &str, start: Option<Duration>, end: Option<Duration>, size_limit: Option<usize>) -> Result<Child> {
     let start = start.unwrap_or(Duration::zero());
     let start_str = format!("{:02}:{:02}:{:02}", start.num_hours(), start.num_minutes() % 60, start.num_seconds() % 60);
 
@@ -146,20 +163,19 @@ pub(crate) fn ffmpeg_dl<T: CodecInfo>(uri: &str, start: Option<Duration>, end: O
 
     debug!("ffmpeg -i \"{}\" {}", uri, opts.join(" "));
 
-    let command = Command::new("ffmpeg")
+    Command::new("ffmpeg")
         .arg("-i")
         .arg(uri)
         .args(opts)
         .stderr(Stdio::piped())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .spawn()?;
-
-    Ok(Box::new(ChildContainer(command)))
+        .spawn()
+        .map_err(|e| e.into())
 }
 
 pub fn ytdl(uri: &str, start: Option<Duration>, end: Option<Duration>) -> Result<Box<AudioSource>> {
     let youtube_uri = ytdl_url(uri)?;
     let command = ffmpeg_dl::<Pcm>(&youtube_uri, start, end, None)?;
-    Ok(pcm(true, command))
+    Ok(pcm(true, command.stdout.unwrap()))
 }

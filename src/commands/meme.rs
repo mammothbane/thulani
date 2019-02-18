@@ -1,14 +1,20 @@
 use std::{
     io::{BufReader, Read},
+    process::{
+        Command,
+        Stdio,
+    },
     sync::RwLock,
 };
 
+use byteorder::{
+    ByteOrder,
+    NativeEndian,
+};
 use diesel::PgConnection;
 use failure::Error;
-use flate2::{
-    bufread::DeflateEncoder,
-    Compression,
-};
+use lame_sys;
+use lame_sys::lame_set_brate;
 use lazy_static::lazy_static;
 use rand::{Rng, thread_rng};
 use serenity::{
@@ -26,6 +32,7 @@ use crate::{
     audio::{
         CtxExt,
         ffmpeg_dl,
+        Mp3,
         Opus,
         parse_times,
         Pcm,
@@ -155,10 +162,21 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()
     let (start, end) = parse_times(opts);
 
     let youtube_url = ytdl_url(audio_link.as_str())?;
-    let mut audio_reader = DeflateEncoder::new(
-        BufReader::new(ffmpeg_dl::<Pcm>(&youtube_url, start, end, None)?),
-        Compression::best(),
-    );
+    let ffmpeg_command = ffmpeg_dl::<Pcm>(&youtube_url, start, end, None)?;
+
+    let lame = Command::new("lame")
+        .args(&[
+            "-r",
+            "-m", "s",
+            "-s", "48",
+            "-V", "2",
+            "-b", "96",
+            "-", "-",
+        ])
+        .stdin(ffmpeg_command.stdout.unwrap())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
 
     let text = match args.multiple_quoted::<String>() {
         Ok(text) => text.join(" "),
@@ -178,12 +196,53 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()
         .ok();
 
     let mut audio_data = Vec::new();
-    let bytes = audio_reader.read_to_end(&mut audio_data)?;
+    lame.stdout.unwrap().read_to_end(&mut audio_data)?;
 
-    if bytes == 0 {
-        debug!("read 0 bytes from audio reader");
-        return send(msg.channel_id, "🔇🔇🔇🔕🔕🔕🔕🔕🔇🔕🔕🔇🔕🔕📣📢📣📢📣", msg.tts);
-    }
+//    let mut i16_data: Vec<i16> = {
+//        let mut audio_data = Vec::new();
+//        let bytes = audio_reader.read_to_end(&mut audio_data)?;
+//
+//        let mut i16_data = Vec::with_capacity(bytes / 2);
+//        i16_data.resize(bytes / 2, 0);
+//
+//        NativeEndian::read_i16_into(&audio_data, &mut i16_data);
+//
+//        i16_data
+//    };
+//
+//    if i16_data.len() == 0 {
+//        debug!("read 0 bytes from audio reader");
+//        return send(msg.channel_id, "🔇🔇🔇🔕🔕🔕🔕🔕🔇🔕🔕🔇🔕🔕📣📢📣📢📣", msg.tts);
+//    }
+//
+//    let audio_data = unsafe {
+//        let lame_flags = lame_sys::lame_init();
+//
+//        lame_sys::lame_set_brate(lame_flags, 96000);
+//        lame_sys::lame_set_num_channels(lame_flags, 2);
+//        lame_sys::lame_set_num_samples(lame_flags, 48000);
+//
+//        let mut out = Vec::<u8>::with_capacity(i16_data.len() * 2);
+//        out.resize(i16_data.len() * 2, 0);
+//
+//        let result = lame_sys::lame_encode_buffer_interleaved(
+//            lame_flags,
+//            i16_data.as_mut_ptr(),
+//            (i16_data.len() / 2) as i32,
+//            out.as_mut_ptr(),
+//            out.len() as i32,
+//        );
+//
+//        if result <= 0 {
+//            debug!("return code {} from lame", result);
+//            return send(msg.channel_id, "wat", msg.tts);
+//        }
+//
+//        out.truncate(result as usize);
+//
+//        out
+//    };
+
 
     let audio_id = Audio::create(&conn, audio_data, msg.author.id.0)?;
 
