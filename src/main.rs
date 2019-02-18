@@ -97,6 +97,8 @@ fn run() -> Result<()> {
             .on_mention(false)
             .owners(vec![UserId(owner_id)].into_iter().collect())
             .case_insensitivity(true)
+            .delimiter("\n")
+            .delimiter("\t")
         )
         .before(|_ctx, message, cmd| {
             let result = message.guild_id.map_or(false, |x| x.0 == *TARGET_GUILD);
