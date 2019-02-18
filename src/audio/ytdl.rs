@@ -45,6 +45,8 @@ pub(crate) trait CodecInfo {
 }
 
 pub(crate) struct Pcm {}
+
+#[allow(dead_code)]
 pub(crate) struct Opus {}
 
 impl CodecInfo for Pcm {
@@ -66,12 +68,9 @@ impl CodecInfo for Opus {
     fn ffmpeg_opts() -> &'static[&'static str] {
         lazy_static! {
             static ref OPTS: Vec<&'static str> = vec! [
-//                "-f", "s16le",
+                "-f", "opus",
                 "-acodec", "libopus",
-                "-sample_fmt", "s16",
-                "-vbr", "off",
-//                "-b:a 96k",
-//                "-vn",
+                "-b:a 96k",
             ];
         }
 
@@ -129,17 +128,17 @@ pub(crate) fn ffmpeg_dl<T: CodecInfo>(uri: &str, start: Option<Duration>, end: O
         .map(|s| s.to_owned())
         .collect::<Vec<_>>();
 
+    if let Some(e) = end {
+        opts.push("-to".to_owned());
+        opts.push(format!("{:02}:{:02}:{:02}", e.num_hours(), e.num_minutes() % 60, e.num_seconds() % 60));
+    }
+
     let codec_opts = T::ffmpeg_opts().into_iter().map(|&s| s.to_owned()).collect::<Vec<_>>();
     opts.extend(codec_opts);
 
     if let Some(limit) = size_limit {
         opts.push("-fs".to_owned());
         opts.push(format!("{}", limit));
-    }
-
-    if let Some(e) = end {
-        opts.push("-to".to_owned());
-        opts.push(format!("{:02}:{:02}:{:02}", e.num_hours(), e.num_minutes() % 60, e.num_seconds() % 60));
     }
 
     opts.push("-".to_owned());

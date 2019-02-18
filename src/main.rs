@@ -1,4 +1,5 @@
 #![feature(impl_trait_in_bindings)]
+#![feature(try_trait)]
 
 extern crate chrono;
 #[cfg(feature = "diesel")]
@@ -8,7 +9,6 @@ extern crate dotenv;
 extern crate either;
 #[macro_use] extern crate failure;
 extern crate fern;
-extern crate flate2;
 #[cfg_attr(test, macro_use)] extern crate itertools;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;

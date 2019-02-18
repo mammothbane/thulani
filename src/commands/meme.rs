@@ -1,14 +1,14 @@
 use std::{
-    io::{BufReader, Read},
+    io::Read,
+    process::{
+        Command,
+        Stdio,
+    },
     sync::RwLock,
 };
 
 use diesel::PgConnection;
 use failure::Error;
-use flate2::{
-    bufread::DeflateEncoder,
-    Compression,
-};
 use lazy_static::lazy_static;
 use rand::{Rng, thread_rng};
 use serenity::{
@@ -25,10 +25,7 @@ use audio::ytdl_url;
 use crate::{
     audio::{
         CtxExt,
-        ffmpeg_dl,
-        Opus,
         parse_times,
-        Pcm,
         PlayArgs,
         PlayQueue,
     },
@@ -155,10 +152,38 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()
     let (start, end) = parse_times(opts);
 
     let youtube_url = ytdl_url(audio_link.as_str())?;
-    let mut audio_reader = DeflateEncoder::new(
-        BufReader::new(ffmpeg_dl::<Pcm>(&youtube_url, start, end, None)?),
-        Compression::best(),
-    );
+
+    let duration_opts = if let Some(e) = end {
+        vec! [
+            "-ss".to_owned(), start.map_or_else(
+                || "00:00:00".to_owned(),
+                |s| format!("{:02}:{:02}:{:02}", s.num_hours(), s.num_minutes() % 60, s.num_seconds() % 60)
+            ),
+
+            "-to".to_owned(), format!("{:02}:{:02}:{:02}", e.num_hours(), e.num_minutes() % 60, e.num_seconds() % 60),
+        ]
+    } else {
+        vec! []
+    };
+
+    let ffmpeg_command = Command::new("ffmpeg")
+        .arg("-i")
+        .arg(youtube_url)
+        .args(duration_opts)
+        .args(&[
+            "-ac", "2",
+            "-ar", "48000",
+            "-f", "opus",
+            "-acodec", "libopus",
+            "-b:a", "96k",
+            "-",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .stdin(Stdio::null())
+        .spawn()?;
+
+    let mut audio_reader = ffmpeg_command.stdout.unwrap();
 
     let text = match args.multiple_quoted::<String>() {
         Ok(text) => text.join(" "),

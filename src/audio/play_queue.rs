@@ -1,13 +1,13 @@
 use std::{
     collections::VecDeque,
-    io::Cursor,
+    io::{self, BufRead, BufReader, Cursor},
+    process,
     sync::{Arc, RwLock},
     thread,
     time::Duration,
 };
 
 use either::{Left, Right};
-use flate2::bufread::DeflateDecoder;
 use serenity::{
     prelude::*,
     voice,
@@ -94,9 +94,9 @@ impl PlayQueue {
                 }
 
                 let mut queue = queue_lck.write().unwrap();
-                let item = queue.queue.pop_front().unwrap();
+                let mut item = queue.queue.pop_front().unwrap();
 
-                let src = match item.data {
+                let src = match &mut item.data {
                     Left(ref url) => {
                         match ytdl(url, item.start, item.end) {
                             Ok(src) => src,
@@ -108,7 +108,52 @@ impl PlayQueue {
                         }
                     },
                     Right(ref vec) => {
-                        voice::pcm(true, DeflateDecoder::new(Cursor::new(vec.clone())))
+                        let mut transcoder = process::Command::new("ffmpeg")
+                            .args(&[
+                                "-format", "opus",
+                                "-i", "pipe:0",
+                                "-acodec", "pcm_s16le",
+                                "-f", "s16le",
+                                "-"
+                            ])
+                            .stdin(process::Stdio::piped())
+                            .stdout(process::Stdio::piped())
+                            .stderr(process::Stdio::piped())
+                            .spawn()
+                            .expect("unable to call ffmpeg");
+
+                        let process::Child {
+                            stdin,
+                            stderr,
+                            stdout,
+                            ..
+                        } = transcoder;
+
+                        thread::spawn(move || {
+                            let stderr = BufReader::new(stderr.unwrap());
+
+                            for line in stderr.lines() {
+                                let line = line.unwrap();
+
+                                trace!("{}", line);
+                            }
+                        });
+
+                        let v = vec.clone();
+                        thread::spawn(move || {
+                            if let Err(e) = io::copy(&mut Cursor::new(v), &mut stdin.unwrap()) {
+                                use std::io::ErrorKind;
+                                if e.kind() == ErrorKind::BrokenPipe {
+                                    debug!("ffmpeg closed unexpectedly");
+                                } else {
+                                    error!("copying audio to ffmpeg {}", e);
+                                }
+                            }
+                        });
+
+                        let result = voice::pcm(true, stdout.unwrap());
+
+                        result
                     }
                 };
 
