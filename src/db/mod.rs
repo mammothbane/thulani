@@ -102,26 +102,34 @@ pub fn delete_meme<T: AsRef<str>>(conn: &PgConnection, search: T, deleted_by: u6
     })
 }
 
-pub fn rand_text(conn: &PgConnection) -> Result<Meme> {
-    memes::table
-        .filter(memes::content.is_not_null())
-        .order(random.desc())
-        .first::<Meme>(conn)
-        .map_err(Error::from)
-}
+pub fn rand_meme(conn: &PgConnection, audio: bool) -> Result<Meme> {
+    use rand::{thread_rng, seq::SliceRandom};
+    use failure::err_msg;
+    use std::ops::Try;
 
-pub fn rand_image(conn: &PgConnection) -> Result<Meme> {
-    memes::table
-        .filter(memes::image_id.is_not_null())
-        .order(random.desc())
-        .first::<Meme>(conn)
-        .map_err(Error::from)
-}
+    let ids: Vec<i32> = if audio {
+        memes::table
+            .select(memes::id)
+            .filter(memes::content.is_not_null()
+                .or(memes::image_id.is_not_null())
+                .or(memes::audio_id.is_not_null()))
+            .load(conn)
+            .map_err(Error::from)?
+    } else {
+        memes::table
+            .select(memes::id)
+            .filter(memes::content.is_not_null()
+                .or(memes::image_id.is_not_null()))
+            .load(conn)
+            .map_err(Error::from)?
+    };
 
-pub fn rand_audio(conn: &PgConnection) -> Result<Meme> {
+    let id = ids.choose(&mut thread_rng())
+        .into_result()
+        .map_err( |_| err_msg("couldn't load meme"))?;
+
     memes::table
-        .filter(memes::audio_id.is_not_null())
-        .order(random.desc())
+        .find(id)
         .first::<Meme>(conn)
         .map_err(Error::from)
 }

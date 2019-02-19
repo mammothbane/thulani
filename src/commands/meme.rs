@@ -30,7 +30,10 @@ use crate::{
         PlayQueue,
     },
     commands::send,
-    db::*,
+    db::{
+        *,
+        rand_meme as db_rand_meme,
+    },
     Result,
 };
 
@@ -238,29 +241,8 @@ fn rand_meme(ctx: &Context, message: &Message) -> Result<()> {
     let conn = connection()?;
 
     let should_audio = ctx.currently_playing() && ctx.users_listening()?;
-    let modulus = if should_audio { 3 } else { 2 };
 
-    let mem = match thread_rng().gen::<u32>() % modulus {
-        0 => rand_text(&conn),
-        1 => rand_image(&conn),
-        2 => rand_audio(&conn),
-        _ => unreachable!(),
-    }
-        .or_else(|_| rand_text(&conn))
-        .and_then(|mut mem| {
-            let mut ctr = 0;
-            while !should_audio && mem.audio_id.is_some() {
-                mem = rand_text(&conn)?;
-
-                ctr += 1;
-                if ctr > 10 {
-                    send(message.channel_id, "yer listenin to somethin else", message.tts)?;
-                    bail!("looped too many times trying to find a non-audio meme");
-                }
-            }
-
-            Ok(mem)
-        });
+    let mem = db_rand_meme(&conn, should_audio);
 
     match mem {
         Ok(mem) => {
