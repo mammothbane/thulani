@@ -134,4 +134,25 @@ pub fn rand_meme(conn: &PgConnection, audio: bool) -> Result<Meme> {
         .map_err(Error::from)
 }
 
+pub fn rand_audio_meme(conn: &PgConnection) -> Result<Meme> {
+    use rand::{thread_rng, seq::SliceRandom};
+    use failure::err_msg;
+    use std::ops::Try;
+
+    let ids: Vec<i32> = memes::table
+        .select(memes::id)
+        .filter(memes::audio_id.is_not_null())
+        .load(conn)
+        .map_err(Error::from)?;
+
+    let id = ids.choose(&mut thread_rng())
+        .into_result()
+        .map_err(|_| err_msg("couldn't load audio meme"))?;
+
+    memes::table
+        .find(id)
+        .first::<Meme>(conn)
+        .map_err(Error::from)
+}
+
 no_arg_sql_function!(random, sql_types::Double, "SQL random() function");

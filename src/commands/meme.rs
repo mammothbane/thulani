@@ -32,6 +32,7 @@ use crate::{
     commands::send,
     db::{
         *,
+        rand_audio_meme as db_rand_audio_meme,
         rand_meme as db_rand_meme,
     },
     Result,
@@ -48,9 +49,19 @@ fn update_meme(meme: &Meme) -> Result<()> {
     Ok(())
 }
 
+#[inline]
 pub fn meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
-    if args.len() == 0 {
-        return rand_meme(ctx, msg);
+    _meme(ctx, msg, args, true)
+}
+
+#[inline]
+pub fn audio_meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+    _meme(ctx, msg, args, true)
+}
+
+fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_only: bool) -> Result<()> {
+    if args.len() == 0 || audio_only {
+        return rand_meme(ctx, msg, audio_only);
     }
 
     let search = args.full();
@@ -237,12 +248,15 @@ pub fn renamememe(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
     send(msg.channel_id, "hwaet", msg.tts)
 }
 
-fn rand_meme(ctx: &Context, message: &Message) -> Result<()> {
+fn rand_meme(ctx: &Context, message: &Message, audio_only: bool) -> Result<()> {
     let conn = connection()?;
 
     let should_audio = ctx.currently_playing() && ctx.users_listening()?;
-
-    let mem = db_rand_meme(&conn, should_audio);
+    let mem = if audio_only {
+        db_rand_audio_meme(&conn)
+    } else {
+        db_rand_meme(&conn, should_audio)
+    };
 
     match mem {
         Ok(mem) => {
@@ -255,7 +269,6 @@ fn rand_meme(ctx: &Context, message: &Message) -> Result<()> {
         },
     }
 }
-
 
 fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Result<()> {
     debug!("sending meme: {:?}", t);
