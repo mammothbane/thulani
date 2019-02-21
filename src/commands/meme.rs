@@ -251,7 +251,7 @@ pub fn renamememe(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
 fn rand_meme(ctx: &Context, message: &Message, audio_only: bool) -> Result<()> {
     let conn = connection()?;
 
-    let should_audio = ctx.currently_playing() && ctx.users_listening()?;
+    let should_audio = ctx.users_listening()?;
     let mem = if audio_only {
         db_rand_audio_meme(&conn)
     } else {
