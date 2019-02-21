@@ -1,26 +1,25 @@
 use std::sync::Arc;
 
-use either::Either;
-use typemap::Key;
 use chrono::Duration;
-
+use either::Either;
 use serenity::{
+    client::bridge::voice::ClientVoiceManager,
     model::{
         id::ChannelId,
     },
     prelude::*,
-    client::bridge::voice::ClientVoiceManager,
     voice::LockedAudio,
 };
+use typemap::Key;
 
 use crate::{
     must_env_lookup,
     Result,
 };
 
+pub use self::play_queue::PlayQueue;
 pub use self::timeutil::parse_times;
 pub use self::ytdl::*;
-pub use self::play_queue::PlayQueue;
 
 mod timeutil;
 mod ytdl;
@@ -35,7 +34,7 @@ impl CtxExt for Context {
     fn currently_playing(&self) -> bool {
         let queue_lock = self.data.lock().get::<PlayQueue>().cloned().unwrap();
         let play_queue = queue_lock.read().unwrap();
-        play_queue.playing.is_none()
+        play_queue.playing.is_some()
     }
 
     fn users_listening(&self) -> Result<bool> {
