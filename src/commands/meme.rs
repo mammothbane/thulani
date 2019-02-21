@@ -51,7 +51,7 @@ fn update_meme(meme: &Meme) -> Result<()> {
 
 #[inline]
 pub fn meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
-    _meme(ctx, msg, args, true)
+    _meme(ctx, msg, args, false)
 }
 
 #[inline]
