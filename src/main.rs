@@ -19,6 +19,7 @@ extern crate serde_json;
 extern crate serenity;
 extern crate sha1;
 extern crate time;
+extern crate timeago;
 extern crate typemap;
 extern crate url;
 

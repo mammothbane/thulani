@@ -16,6 +16,10 @@ use serenity::{
     model::channel::Message,
     prelude::*,
 };
+use timeago::{
+    Formatter,
+    TimeUnit,
+};
 use url::Url;
 
 use audio::ytdl_url;
@@ -35,6 +39,16 @@ use crate::{
     },
     Result,
 };
+
+lazy_static! {
+    static ref TIME_FORMATTER: Formatter = {
+        let mut f = Formatter::new();
+        f.min_unit(TimeUnit::Minutes);
+        f.num_items(2);
+
+        f
+    };
+}
 
 #[inline]
 pub fn meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
@@ -127,6 +141,12 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         .enumerate()
         .rev()
         .map(|(i, rec)| {
+            use chrono;
+
+            let dt = chrono::DateTime::from_utc(rec.time, chrono::Utc{});
+            let ago = TIME_FORMATTER.convert((chrono::Utc::now() - dt).to_std().unwrap());
+
+            let rand = if rec.random { "R, " } else { "" };
             Meme::find(&conn, rec.meme_id)
                 .and_then(|meme| {
                     Metadata::find(&conn, meme.metadata_id).map(|metadata| (metadata, meme))
@@ -134,11 +154,11 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
                 .map(|(metadata, meme)| {
                     let author_name = crate::TARGET_GUILD_ID.member(metadata.created_by as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
                     let invoker_name = crate::TARGET_GUILD_ID.member(rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
-                    format!("{}. \"{}\" by {} ({}). invoked by {} at {}", i + 1, meme.title, author_name, metadata.created.date(), invoker_name, rec.time)
+                    format!("{}. [{}{}] \"{}\" by {} ({}). invoked by {}.", i + 1, rand, ago, meme.title, author_name, metadata.created.date(), invoker_name)
                 })
                 .unwrap_or_else(|_| {
                     let invoker_name = crate::TARGET_GUILD_ID.member(rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
-                    format!("{}. not found. invoked by {} at {}", i + 1, invoker_name, rec.time)
+                    format!("{}. [{}{}] not found. invoked by {}.", i + 1, rand, ago, invoker_name)
                 })
         })
         .join("\n");
