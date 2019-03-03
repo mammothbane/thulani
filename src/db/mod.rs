@@ -155,4 +155,38 @@ pub fn rand_audio_meme(conn: &PgConnection) -> Result<Meme> {
         .map_err(Error::from)
 }
 
+#[derive(Debug, Copy, Clone, Default)]
+pub struct Stats {
+    pub memes_overall: usize,
+    pub audio_memes: usize,
+    pub image_memes: usize,
+}
+
+pub fn stats(conn: &PgConnection) -> Result<Stats> {
+    use diesel::dsl::{count_star, count};
+
+    let total_count: i64 = memes::table
+        .select(count_star())
+        .first(conn)
+        .map_err(Error::from)?;
+
+    let image_count: i64 = memes::table
+        .select(count(memes::image_id))
+        .filter(memes::image_id.is_not_null())
+        .first(conn)
+        .map_err(Error::from)?;
+
+    let audio_count: i64 = memes::table
+        .select(count(memes::audio_id))
+        .filter(memes::audio_id.is_not_null())
+        .first(conn)
+        .map_err(Error::from)?;
+
+    Ok(Stats {
+        memes_overall: total_count as usize,
+        image_memes: image_count as usize,
+        audio_memes: audio_count as usize,
+    })
+}
+
 no_arg_sql_function!(random, sql_types::Double, "SQL random() function");

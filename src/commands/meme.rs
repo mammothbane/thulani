@@ -244,8 +244,21 @@ pub fn delmeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     msg.react("💀")
 }
 
-pub fn renamememe(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
-    send(msg.channel_id, "hwaet", msg.tts)
+pub fn stats(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
+    use db;
+
+    let conn = connection()?;
+    let stats = db::stats(&conn)?;
+
+    let s = format!(
+        "{} memes total\n{} memes with audio ({:0.1}%)\n{} memes with images ({:0.1}%)",
+        stats.memes_overall,
+        stats.audio_memes,
+        (stats.audio_memes as f64) / (stats.memes_overall as f64) * 100.,
+        stats.image_memes,
+        (stats.image_memes as f64) / (stats.memes_overall as f64) * 100.,
+    );
+    send(msg.channel_id, s, msg.tts)
 }
 
 fn rand_meme(ctx: &Context, message: &Message, audio_only: bool) -> Result<()> {
