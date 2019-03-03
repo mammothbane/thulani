@@ -27,6 +27,17 @@ table! {
 }
 
 table! {
+    invocation_records (id) {
+        id -> Int4,
+        user_id -> Int8,
+        message_id -> Int8,
+        meme_id -> Int4,
+        time -> Timestamp,
+        random -> Bool,
+    }
+}
+
+table! {
     memes (id) {
         id -> Int4,
         title -> Varchar,
@@ -67,6 +78,7 @@ allow_tables_to_appear_in_same_query!(
     audio,
     audit_records,
     images,
+    invocation_records,
     memes,
     metadata,
     tombstones,

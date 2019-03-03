@@ -4,12 +4,10 @@ use std::{
         Command,
         Stdio,
     },
-    sync::RwLock,
 };
 
 use diesel::PgConnection;
 use failure::Error;
-use lazy_static::lazy_static;
 use rand::{Rng, thread_rng};
 use serenity::{
     builder::CreateMessage,
@@ -38,17 +36,6 @@ use crate::{
     Result,
 };
 
-lazy_static! {
-    static ref LAST_MEME: RwLock<Option<i32>> = RwLock::new(None);
-}
-
-fn update_meme(meme: &Meme) -> Result<()> {
-    let mut opt = LAST_MEME.write().map_err(|_| crate::failure::err_msg("unable to acquire lock"))?;
-    *opt = Some(meme.id);
-
-    Ok(())
-}
-
 #[inline]
 pub fn meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     _meme(ctx, msg, args, false)
@@ -69,7 +56,7 @@ fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_only: bool) -> Resu
     let conn = connection()?;
     let mem = match find_meme(&conn, search) {
         Ok(x) => {
-            update_meme(&x)?;
+            InvocationRecord::create(&conn, msg.author.id.0, msg.id.0, x.id, false)?;
 
             x
         },
@@ -90,17 +77,13 @@ fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_only: bool) -> Resu
 }
 
 pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
-    use failure::err_msg;
-
     let conn = connection()?;
-    let meme = LAST_MEME.read()
-        .map_err(|_| err_msg("unable to acquire read lock"))
-        .and_then(|id| {
-            id.ok_or(err_msg("no previous meme"))
-                .and_then(|id| {
-                    Meme::find(&conn, id)
-                })
-        });
+
+    let record = match InvocationRecord::last(&conn) {
+        Ok(x) => x,
+        Err(_) => return send(msg.channel_id, "no one has ever memed before", msg.tts),
+    };
+    let meme = Meme::find(&conn, record.meme_id);
 
     match meme {
         Ok(ref meme) => {
@@ -115,6 +98,52 @@ pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
     };
 
     meme.map(|_| {})
+}
+
+pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+    use itertools::Itertools;
+
+    const MAX_HIST: usize = 8;
+    const DEFAULT_HIST: usize = 3;
+
+    let conn = connection()?;
+
+    let n = args.single_quoted::<usize>().unwrap_or(DEFAULT_HIST);
+
+    if n > MAX_HIST {
+        send(msg.channel_id, "YER PUSHIN ME OVER THE FUCKIN LINE", true)?;
+    }
+
+    let n = n.min(MAX_HIST);
+
+    let records = InvocationRecord::last_n(&conn, n)?;
+
+    if records.len() == 0 {
+        return send(msg.channel_id, "i don't remember anything :(", msg.tts);
+    }
+
+    let resp = records
+        .into_iter()
+        .enumerate()
+        .rev()
+        .map(|(i, rec)| {
+            Meme::find(&conn, rec.meme_id)
+                .and_then(|meme| {
+                    Metadata::find(&conn, meme.metadata_id).map(|metadata| (metadata, meme))
+                })
+                .map(|(metadata, meme)| {
+                    let author_name = crate::TARGET_GUILD_ID.member(metadata.created_by as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    let invoker_name = crate::TARGET_GUILD_ID.member(rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    format!("{}. \"{}\" by {} ({}). invoked by {} at {}", i + 1, meme.title, author_name, metadata.created.date(), invoker_name, rec.time)
+                })
+                .unwrap_or_else(|_| {
+                    let invoker_name = crate::TARGET_GUILD_ID.member(rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    format!("{}. not found. invoked by {} at {}", i + 1, invoker_name, rec.time)
+                })
+        })
+        .join("\n");
+
+    send(msg.channel_id, &resp, false)
 }
 
 pub fn addmeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
@@ -273,7 +302,7 @@ fn rand_meme(ctx: &Context, message: &Message, audio_only: bool) -> Result<()> {
 
     match mem {
         Ok(mem) => {
-            update_meme(&mem)?;
+            InvocationRecord::create(&conn, message.author.id.0, message.id.0, mem.id, true)?;
             send_meme(ctx, &mem, &conn, message).map_err(Error::from)
         },
         err @ Err(_) => {

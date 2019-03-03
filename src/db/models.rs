@@ -235,3 +235,52 @@ pub struct NewTombstone {
     pub metadata_id: i32,
     pub meme_id: i32,
 }
+
+#[derive(Queryable, Identifiable, PartialEq, Debug)]
+#[table_name="invocation_records"]
+pub struct InvocationRecord {
+    pub id: i32,
+    pub user_id: i64,
+    pub message_id: i64,
+    pub meme_id: i32,
+    pub time: NaiveDateTime,
+    pub random: bool,
+}
+
+#[derive(Insertable, PartialEq, Debug)]
+#[table_name="invocation_records"]
+pub struct NewInvocationRecord {
+    pub user_id: i64,
+    pub message_id: i64,
+    pub meme_id: i32,
+    pub random: bool,
+}
+
+impl InvocationRecord {
+    pub fn create(conn: &PgConnection, user_id: u64, message_id: u64, meme_id: i32, random: bool) -> Result<Self> {
+        ::diesel::insert_into(invocation_records::table)
+            .values(&NewInvocationRecord {
+                user_id: user_id as i64,
+                message_id: message_id as i64,
+                meme_id,
+                random,
+            })
+            .get_result::<InvocationRecord>(conn)
+            .map_err(Error::from)
+    }
+
+    pub fn last(conn: &PgConnection) -> Result<Self> {
+        invocation_records::table
+            .order(invocation_records::time.desc())
+            .first(conn)
+            .map_err(Error::from)
+    }
+
+    pub fn last_n(conn: &PgConnection, n: usize) -> Result<Vec<Self>> {
+        invocation_records::table
+            .order(invocation_records::time.desc())
+            .limit(n as i64)
+            .load(conn)
+            .map_err(Error::from)
+    }
+}

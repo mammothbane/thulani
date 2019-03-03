@@ -116,6 +116,12 @@ fn register_db(f: StandardFramework) -> StandardFramework {
             .desc("get meme stats")
             .cmd(stats)
         )
+        .command("history", |c| c
+            .known_as("hist")
+            .guild_only(true)
+            .desc("history of recent messages")
+            .cmd(history)
+        )
 }
 
 #[cfg(not(feature = "diesel"))]
