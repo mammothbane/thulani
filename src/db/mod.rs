@@ -8,7 +8,6 @@ use diesel::{
     prelude::*,
     r2d2::{ConnectionManager, ManageConnection},
 };
-use diesel::sql_types;
 
 use crate::{Error, Result};
 
