@@ -295,17 +295,33 @@ pub fn delmeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
 pub fn stats(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
     use db;
+    use chrono;
 
     let conn = connection()?;
     let stats = db::stats(&conn)?;
 
     let s = format!(
-        "{} memes total\n{} memes with audio ({:0.1}%)\n{} memes with images ({:0.1}%)",
+        r#"
+{} memes total
+{} memes with audio ({:0.1}%)
+{} memes with images ({:0.1}%)
+
+started recording meme invocations on {} ({})
+{} total meme invocations recorded
+{} of which were random ({:0.1}%)
+and {} were audio ({:0.1}%)"#,
         stats.memes_overall,
         stats.audio_memes,
         (stats.audio_memes as f64) / (stats.memes_overall as f64) * 100.,
         stats.image_memes,
         (stats.image_memes as f64) / (stats.memes_overall as f64) * 100.,
+        stats.started_recording.date(),
+        TIME_FORMATTER.convert((chrono::Utc::now() - stats.started_recording).to_std().unwrap()),
+        stats.total_meme_invocations,
+        stats.random_meme_invocations,
+        (stats.random_meme_invocations as f64) / (stats.total_meme_invocations as f64) * 100.,
+        stats.audio_meme_invocations,
+        (stats.audio_meme_invocations as f64) / (stats.total_meme_invocations as f64) * 100.,
     );
     send(msg.channel_id, s, msg.tts)
 }

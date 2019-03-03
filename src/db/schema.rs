@@ -73,6 +73,7 @@ joinable!(memes -> audio (audio_id));
 joinable!(memes -> images (image_id));
 joinable!(memes -> metadata (metadata_id));
 joinable!(tombstones -> metadata (metadata_id));
+joinable!(invocation_records -> memes (meme_id));
 
 allow_tables_to_appear_in_same_query!(
     audio,

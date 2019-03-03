@@ -3,6 +3,10 @@ use std::{
     env,
 };
 
+use chrono::{
+    DateTime,
+    Utc,
+};
 use diesel::{
     NotFound,
     prelude::*,
@@ -154,15 +158,20 @@ pub fn rand_audio_meme(conn: &PgConnection) -> Result<Meme> {
         .map_err(Error::from)
 }
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone)]
 pub struct Stats {
     pub memes_overall: usize,
     pub audio_memes: usize,
     pub image_memes: usize,
+    pub started_recording: DateTime<Utc>,
+    pub total_meme_invocations: usize,
+    pub audio_meme_invocations: usize,
+    pub random_meme_invocations: usize,
 }
 
 pub fn stats(conn: &PgConnection) -> Result<Stats> {
     use diesel::dsl::{count_star, count};
+    use chrono::NaiveDateTime;
 
     let total_count: i64 = memes::table
         .select(count_star())
@@ -181,9 +190,39 @@ pub fn stats(conn: &PgConnection) -> Result<Stats> {
         .first(conn)
         .map_err(Error::from)?;
 
+    let started_recording: NaiveDateTime = invocation_records::table
+        .select(invocation_records::time)
+        .order(invocation_records::time)
+        .first(conn)
+        .map_err(Error::from)?;
+
+    let started_recording = DateTime::from_utc(started_recording, Utc{});
+
+    let total_meme_invocations: i64 = invocation_records::table
+        .select(count_star())
+        .first(conn)
+        .map_err(Error::from)?;
+
+    let audio_meme_invocations: i64 = invocation_records::table
+        .inner_join(memes::table)
+        .select(count_star())
+        .filter(memes::audio_id.is_not_null())
+        .first(conn)
+        .map_err(Error::from)?;
+
+    let random_meme_invocations: i64 = invocation_records::table
+        .select(count_star())
+        .filter(invocation_records::random.eq(true))
+        .first(conn)
+        .map_err(Error::from)?;
+
     Ok(Stats {
         memes_overall: total_count as usize,
         image_memes: image_count as usize,
         audio_memes: audio_count as usize,
+        started_recording,
+        total_meme_invocations: total_meme_invocations as usize,
+        audio_meme_invocations: audio_meme_invocations as usize,
+        random_meme_invocations: random_meme_invocations as usize,
     })
 }
