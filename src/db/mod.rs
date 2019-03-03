@@ -188,5 +188,3 @@ pub fn stats(conn: &PgConnection) -> Result<Stats> {
         audio_memes: audio_count as usize,
     })
 }
-
-no_arg_sql_function!(random, sql_types::Double, "SQL random() function");
