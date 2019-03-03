@@ -107,12 +107,16 @@ fn run() -> Result<()> {
 
             result          
         })
-        .after(|_ctx, _msg, cmd, err| {
+        .after(|_ctx, msg, cmd, err| {
             match err {
                 Ok(()) => {
                     trace!("command '{}' completed successfully", cmd);
                 },
                 Err(e) => {
+                    if let Err(e) = crate::commands::send(msg.channel_id, "BANIC", msg.tts) {
+                        error!("sending BANIC: {}", e);
+                    }
+
                     error!("error encountered handling command '{}': {:?}", cmd, e);
                 }
             }

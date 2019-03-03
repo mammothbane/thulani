@@ -6,7 +6,11 @@ use std::{
     },
 };
 
-use diesel::PgConnection;
+use diesel::{
+    NotFound,
+    PgConnection,
+    result::Error as DieselError,
+};
 use failure::Error;
 use rand::{Rng, thread_rng};
 use serenity::{
@@ -22,14 +26,13 @@ use timeago::{
 };
 use url::Url;
 
-use audio::ytdl_url;
-
 use crate::{
     audio::{
         CtxExt,
         parse_times,
         PlayArgs,
         PlayQueue,
+        ytdl_url,
     },
     commands::send,
     db::{
@@ -75,15 +78,12 @@ fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_only: bool) -> Resu
             x
         },
         Err(e) => {
-            use diesel::{NotFound, self};
-
-            if let Some(NotFound) = e.downcast_ref::<diesel::result::Error>() {
-                send(msg.channel_id, "c'mon baby, guesstimate", msg.tts)?;
+            return if let Some(NotFound) = e.downcast_ref::<DieselError>() {
+                send(msg.channel_id, "c'mon baby, guesstimate", msg.tts)
             } else {
                 send(msg.channel_id, "what in ryan's name", msg.tts)?;
-            }
-
-            return Err(e)
+                Err(e)
+            };
         },
     };
 
@@ -95,8 +95,16 @@ pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
 
     let record = match InvocationRecord::last(&conn) {
         Ok(x) => x,
-        Err(_) => return send(msg.channel_id, "no one has ever memed before", msg.tts),
+        Err(e) => {
+            if let Some(NotFound) = e.downcast_ref::<DieselError>() {
+                return send(msg.channel_id, "no one has ever memed before", msg.tts);
+            }
+
+            send(msg.channel_id, "BAD MEME BAD MEME", msg.tts)?;
+            return Err(e);
+        },
     };
+
     let meme = Meme::find(&conn, record.meme_id);
 
     match meme {
@@ -108,7 +116,14 @@ pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
                  &format!("that was \"{}\" by {} ({})",
                           meme.title, author.mention(), metadata.created.date()), msg.tts)?
         },
-        Err(_) => send(msg.channel_id, "heuueueeeeh?", msg.tts)?,
+        Err(e) => {
+            if let Some(NotFound) = e.downcast_ref::<DieselError>() {
+                return send(msg.channel_id, "heuueueeeeh?", msg.tts);
+            }
+
+            send(msg.channel_id, "do i look like i know what a jpeg is", msg.tts)?;
+            return Err(e);
+        },
     };
 
     meme.map(|_| {})
@@ -156,7 +171,13 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
                     let invoker_name = crate::TARGET_GUILD_ID.member(rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
                     format!("{}. [{}{}] \"{}\" by {} ({}). invoked by {}.", i + 1, rand, ago, meme.title, author_name, metadata.created.date(), invoker_name)
                 })
-                .unwrap_or_else(|_| {
+                .unwrap_or_else(|e| {
+                    if let Some(variant) = e.downcast_ref::<DieselError>() {
+                        if *variant != NotFound {
+                            error!("error encountered loading meme history: {}", e);
+                        }
+                    }
+
                     let invoker_name = crate::TARGET_GUILD_ID.member(rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
                     format!("{}. [{}{}] not found. invoked by {}.", i + 1, rand, ago, invoker_name)
                 })
@@ -208,6 +229,7 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
     let elems = audio_str.split_whitespace().collect::<Vec<_>>();
 
     if elems.len() == 0 {
+        send(msg.channel_id, "are you stupid", msg.tts)?;
         return Err(::failure::err_msg("no audio link was provided"))
     }
 
