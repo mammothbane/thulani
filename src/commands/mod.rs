@@ -56,6 +56,7 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
             .guild_only(true)
             .exec(volume))
         .command("roll", |c| c
+            .known_as("calc")
             .desc("simulate rolling dice")
             .guild_only(true)
             .exec(roll::roll))

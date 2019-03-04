@@ -1,6 +1,7 @@
 #![feature(impl_trait_in_bindings)]
 #![feature(try_trait)]
 #![feature(pattern)]
+#![feature(concat_idents)]
 
 #![feature(box_syntax, box_patterns)]
 

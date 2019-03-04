@@ -114,47 +114,33 @@ enum UnaryOp {
 }
 
 fn parse_expr(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, alt_complete!(
-        parse_infix |
-        parse_dice |
-        parse_binary_prefix |
-        parse_suffix |
-        parse_prefix |
-        parse_term_or_paren
-    ))
+    ws!(input, up_to_add_sub_mod)
 }
 
-fn parse_term_or_paren(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, alt_complete!(
-        delimited!(char!('('), parse_expr, char!(')')) |
-        do_parse!(
-            dat: double >>
-            (Box::new(CalcExpr::Term(dat)))
-        )
-    ))
-}
-
-fn parse_dice(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
+fn parse_add_sub_mod(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
     ws!(input, do_parse!(
-        tpl: separated_pair!(parse_term_or_paren, ws!(char!('d')), parse_term_or_paren) >>
-        ({
-            let (expr1, expr2) = tpl;
-            Box::new(CalcExpr::Binary(BinOp::DiceRoll, expr1, expr2))
-        })
-    ))
-}
-
-fn parse_infix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, do_parse!(
-        tpl: tuple!(parse_term_or_paren, ws!(one_of!("+-*/%^")), parse_term_or_paren) >>
+        tpl: tuple!(up_to_div_mul, ws!(one_of!("+-%")), up_to_div_mul) >>
         ({
             let (expr1, op, expr2) = tpl;
             let op = match op {
                 '+' => BinOp::Add,
                 '-' => BinOp::Sub,
+                '%' => BinOp::Mod,
+                _ => unreachable!(),
+            };
+            Box::new(CalcExpr::Binary(op, expr1, expr2))
+        })
+    ))
+}
+
+fn parse_div_mul(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
+    ws!(input, do_parse!(
+        tpl: tuple!(up_to_binary_prefix, ws!(one_of!("/*")), up_to_binary_prefix) >>
+        ({
+            let (expr1, op, expr2) = tpl;
+            let op = match op {
                 '*' => BinOp::Mul,
                 '/' => BinOp::Div,
-                '%' => BinOp::Mod,
                 '^' => BinOp::Pow,
                 _ => unreachable!(),
             };
@@ -163,7 +149,19 @@ fn parse_infix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
     ))
 }
 
-fn parse_prefix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
+fn parse_binary_prefix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
+    ws!(input, do_parse!(
+        op: ws!(alt_complete!(
+            tag!("min") => { |_| BinOp::Min } |
+            tag!("max") => { |_| BinOp::Max }
+        )) >>
+        expr1: up_to_unary_prefix >>
+        expr2: up_to_unary_prefix >>
+        (Box::new(CalcExpr::Binary(op, expr1, expr2)))
+    ))
+}
+
+fn parse_unary_prefix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
     ws!(input, do_parse!(
         op: ws!(alt_complete!(
             tag!("log") => { |_| UnaryOp::Log }
@@ -177,22 +175,36 @@ fn parse_prefix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> 
             | tag!("floor") => { |_| UnaryOp::Floor }
             | tag!("abs") => { |_| UnaryOp::Abs }
             | tag!("round") => { |_| UnaryOp::Round }
-            | char!('-') => { |_| UnaryOp::Neg }
         )) >>
-        expr: parse_term_or_paren >>
+        expr: up_to_dice >>
         (Box::new(CalcExpr::Unary(op, expr)))
     ))
 }
 
-fn parse_binary_prefix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
+fn parse_dice(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
     ws!(input, do_parse!(
-        op: ws!(alt_complete!(
-            tag!("min") => { |_| BinOp::Min } |
-            tag!("max") => { |_| BinOp::Max }
-        )) >>
-        expr1: parse_term_or_paren >>
-        expr2: parse_term_or_paren >>
-        (Box::new(CalcExpr::Binary(op, expr1, expr2)))
+        tpl: separated_pair!(up_to_pow, ws!(char!('d')), up_to_pow) >>
+        ({
+            let (expr1, expr2) = tpl;
+            Box::new(CalcExpr::Binary(BinOp::DiceRoll, expr1, expr2))
+        })
+    ))
+}
+
+fn parse_pow(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
+    ws!(input, do_parse!(
+        tpl: separated_pair!(up_to_neg, ws!(char!('^')), up_to_neg) >>
+        ({
+            let (expr1, expr2) = tpl;
+            Box::new(CalcExpr::Binary(BinOp::Pow, expr1, expr2))
+        })
+    ))
+}
+
+fn parse_neg(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
+    ws!(input, do_parse!(
+        expr: ws!(preceded!(char!('-'), up_to_suffix)) >>
+        (Box::new(CalcExpr::Unary(UnaryOp::Neg, expr)))
     ))
 }
 
@@ -202,6 +214,33 @@ fn parse_suffix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> 
         (Box::new(CalcExpr::Unary(UnaryOp::Factorial, expr)))
     ))
 }
+
+fn parse_term_or_paren(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
+    ws!(input, alt_complete!(
+        delimited!(char!('('), parse_expr, char!(')')) |
+        do_parse!(
+            dat: double >>
+            (Box::new(CalcExpr::Term(dat)))
+        )
+    ))
+}
+
+macro_rules! up_to {
+    ($up_to_name:ident, $fn_name:ident, $prev:ident) => (
+        fn $up_to_name(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
+            alt_complete!(input, $fn_name | $prev)
+        }
+    )
+}
+
+up_to! { up_to_add_sub_mod, parse_add_sub_mod, up_to_div_mul }
+up_to! { up_to_div_mul, parse_div_mul, up_to_binary_prefix }
+up_to! { up_to_binary_prefix, parse_binary_prefix, up_to_unary_prefix }
+up_to! { up_to_unary_prefix, parse_unary_prefix, up_to_dice }
+up_to! { up_to_dice, parse_dice, up_to_pow }
+up_to! { up_to_pow, parse_pow, up_to_neg }
+up_to! { up_to_neg, parse_neg, up_to_suffix }
+up_to! { up_to_suffix, parse_suffix, parse_term_or_paren }
 
 #[cfg(test)]
 mod test {
