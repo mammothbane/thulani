@@ -405,7 +405,7 @@ fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Res
         let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
         let mut play_queue = queue_lock.write().unwrap();
 
-        play_queue.queue.push_front(PlayArgs{
+        play_queue.meme_queue.push_back(PlayArgs{
             initiator: msg.author.name.clone(),
             data: ::either::Right(audio.data.clone()),
             sender_channel: msg.channel_id,

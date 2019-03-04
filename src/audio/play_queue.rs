@@ -40,7 +40,8 @@ const POST_SILENCE_BYTES: usize = (SECONDS_TRAIL_TIME * (SAMPLE_RATE * CHANNELS 
 
 #[derive(Clone)]
 pub struct PlayQueue {
-    pub queue: VecDeque<PlayArgs>,
+    pub general_queue: VecDeque<PlayArgs>,
+    pub meme_queue: VecDeque<PlayArgs>,
     pub playing: Option<CurrentItem>,
     pub volume: f32,
 }
@@ -52,7 +53,8 @@ impl Key for PlayQueue {
 impl PlayQueue {
     pub fn new() -> Self {
         PlayQueue {
-            queue: VecDeque::new(),
+            general_queue: VecDeque::new(),
+            meme_queue: VecDeque::new(),
             playing: None,
             volume: DEFAULT_VOLUME,
         }
@@ -87,7 +89,7 @@ impl PlayQueue {
                 return Ok(());
             }
 
-            (queue.queue.is_empty(), queue.playing.is_some())
+            (queue.general_queue.is_empty() && queue.meme_queue.is_empty(), queue.playing.is_some())
         };
 
         if queue_is_empty {
@@ -111,7 +113,12 @@ impl PlayQueue {
         }
 
         let mut queue = queue_lck.write().unwrap();
-        let mut item = queue.queue.pop_front().unwrap();
+
+        let mut item = if !queue.meme_queue.is_empty() {
+            queue.meme_queue.pop_front().unwrap()
+        } else {
+            queue.general_queue.pop_front().unwrap()
+        };
 
         let src = match &mut item.data {
             Left(ref url) => {

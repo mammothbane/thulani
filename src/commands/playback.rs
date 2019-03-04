@@ -1,20 +1,20 @@
-use serenity::{
-    prelude::*,
-    model::channel::Message,
-    framework::standard::Args,
-};
 use either::{Left, Right};
+use serenity::{
+    framework::standard::Args,
+    model::channel::Message,
+    prelude::*,
+};
 
 use crate::{
-    TARGET_GUILD_ID,
-    Result,
-    commands::send,
     audio::{
         parse_times,
-        PlayQueue,
         PlayArgs,
+        PlayQueue,
         VoiceManager,
     },
+    commands::send,
+    Result,
+    TARGET_GUILD_ID,
 };
 
 pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
@@ -54,7 +54,7 @@ pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
     let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
     let mut play_queue = queue_lock.write().unwrap();
 
-    play_queue.queue.push_back(PlayArgs{
+    play_queue.general_queue.push_back(PlayArgs{
         initiator: msg.author.name.clone(),
         data: Left(url.into_string()),
         sender_channel: msg.channel_id,
@@ -175,7 +175,8 @@ pub fn die(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
         let mut play_queue = queue_lock.write().unwrap();
 
         play_queue.playing = None;
-        play_queue.queue.clear();
+        play_queue.general_queue.clear();
+        play_queue.meme_queue.clear();
     }
 
     if let Some(handler) = manager.get_mut(*TARGET_GUILD_ID) {
@@ -215,7 +216,8 @@ pub fn list(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
         },
     }
 
-    play_queue.queue.iter()
+    play_queue.meme_queue.iter()
+        .chain(play_queue.general_queue.iter())
         .for_each(|info| {
             let playing_info = match info.data {
                 Left(ref url) => format!("`{}`", url),
