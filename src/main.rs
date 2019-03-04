@@ -2,6 +2,8 @@
 #![feature(try_trait)]
 #![feature(pattern)]
 
+#![feature(box_syntax, box_patterns)]
+
 extern crate chrono;
 #[cfg(feature = "diesel")]
 #[macro_use] extern crate diesel;
@@ -13,11 +15,13 @@ extern crate fern;
 #[cfg_attr(test, macro_use)] extern crate itertools;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
+#[macro_use] extern crate nom;
 extern crate rand;
 extern crate regex;
 extern crate serde_json;
 extern crate serenity;
 extern crate sha1;
+extern crate statrs;
 extern crate time;
 extern crate timeago;
 extern crate typemap;

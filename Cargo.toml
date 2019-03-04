@@ -27,6 +27,8 @@ regex = "~1.1"
 itertools = "^0.8"
 serde_json = "~1.0"
 timeago = "^0.1"
+nom = { version = "~4.2", features = ["verbose-errors"] }
+statrs = "^0.10"
 
 [dependencies.serenity]
 default-features = false
