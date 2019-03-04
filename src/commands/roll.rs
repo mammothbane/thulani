@@ -72,6 +72,10 @@ impl CalcExpr {
                     Tan => r.tan(),
                     Factorial => statrs::function::gamma::gamma(r),
                     Exp => r.exp(),
+                    Abs => r.abs(),
+                    Ceil => r.ceil(),
+                    Floor => r.floor(),
+                    Round => r.round(),
                 }
             },
             Term(v) => v,
@@ -103,6 +107,10 @@ enum UnaryOp {
     Tan,
     Factorial,
     Neg,
+    Ceil,
+    Floor,
+    Abs,
+    Round,
 }
 
 fn parse_expr(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
@@ -165,6 +173,10 @@ fn parse_prefix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> 
             | tag!("tan") => { |_| UnaryOp::Tan }
             | tag!("sgn") => { |_| UnaryOp::Sgn }
             | tag!("exp") => { |_| UnaryOp::Exp }
+            | tag!("ceil") => { |_| UnaryOp::Ceil }
+            | tag!("floor") => { |_| UnaryOp::Floor }
+            | tag!("abs") => { |_| UnaryOp::Abs }
+            | tag!("round") => { |_| UnaryOp::Round }
             | char!('-') => { |_| UnaryOp::Neg }
         )) >>
         expr: parse_term_or_paren >>
