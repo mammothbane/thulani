@@ -22,14 +22,15 @@ pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
 
     debug!("playing '{}'", url);
     if !url.starts_with("http") {
+        warn!("got bad url argument to play: {}", url);
         send(msg.channel_id, "bAD LiNk", msg.tts)?;
         return Ok(());
     }
 
     let url = match Url::parse(url) {
         Err(e) => {
-            send(msg.channel_id, "INVALID URL", msg.tts)?;
-            return Err(e.into());
+            error!("bad url: {}", e);
+            return send(msg.channel_id, "INVALID URL", msg.tts);
         },
         Ok(u) => u,
     };
@@ -40,6 +41,8 @@ pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
     });
 
     if host.map(|h| h.to_lowercase().contains("imgur")).unwrap_or(false) {
+        info!("detected imgur link");
+
         if msg.author.id.0 == 106160362109272064 {
             send(msg.channel_id, "fuck you conway", true)?;
         } else {
@@ -72,7 +75,10 @@ pub fn play(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
     let url = match args.single::<String>() {
         Ok(url) => url,
-        Err(_) => return send(msg.channel_id, "BAD LINK", msg.tts),
+        Err(e) => {
+            error!("unable to parse url from args: {}", e);
+            return send(msg.channel_id, "BAD LINK", msg.tts);
+        },
     };
 
     _play(ctx, msg, &url)
@@ -102,6 +108,8 @@ pub fn pause(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
         let queue = queue_lock.write().unwrap();
         let ref audio = queue.playing.clone().unwrap().audio;
         audio.lock().pause();
+
+        info!("paused playback");
     }
 
     Ok(())
@@ -132,6 +140,7 @@ fn _resume(ctx: &mut Context, msg: &Message) -> Result<()> {
 
     if playing {
         done()?;
+        debug!("attempted to resume playback while sound was already playing");
         return Ok(());
     }
 
@@ -139,6 +148,7 @@ fn _resume(ctx: &mut Context, msg: &Message) -> Result<()> {
         let queue = queue_lock.write().unwrap();
         let ref audio = queue.playing.clone().unwrap().audio;
         audio.lock().play();
+        info!("playback resumed");
     }
 
     Ok(())
@@ -156,6 +166,7 @@ pub fn skip(ctx: &mut Context, _msg: &Message, _args: Args) -> Result<()> {
         handler.stop();
         let mut play_queue = queue_lock.write().unwrap();
         play_queue.playing = None;
+        info!("skipped currently-playing audio");
     } else {
         debug!("got skip with no handler attached");
     }
@@ -180,6 +191,7 @@ pub fn die(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     }
 
     if let Some(handler) = manager.get_mut(*TARGET_GUILD_ID) {
+        info!("killing playback");
         handler.stop();
         handler.leave();
     } else {
@@ -197,6 +209,7 @@ pub fn list(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let channel_tmp = msg.channel().unwrap().guild().unwrap();
     let channel = channel_tmp.read();
 
+    info!("listing queue");
     match play_queue.playing {
         Some(ref info) => {
             let audio = info.audio.lock();

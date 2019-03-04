@@ -6,9 +6,7 @@ use serenity::{
 
 use crate::{
     audio::{PlayQueue, VoiceManager},
-    commands::{
-        send,
-    },
+    commands::send,
     Result,
     TARGET_GUILD_ID,
 };
@@ -58,13 +56,21 @@ pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
             (play_queue.volume / DEFAULT_VOLUME * 100.0) as usize
         };
 
+        trace!("reporting volume {}", vol);
+
         return send(msg.channel_id, &format!("volume: {}%", vol), msg.tts);
     }
 
     let vol: usize = match args.single::<f32>() {
-        Ok(vol) if vol.is_nan() => return send(msg.channel_id, "you're a fuck", msg.tts),
+        Ok(vol) if vol.is_nan() => {
+            warn!("reporting NaN volume");
+            return send(msg.channel_id, "you're a fuck", msg.tts);
+        },
         Ok(vol) => vol as usize,
-        Err(_) => return send(msg.channel_id, "???????", msg.tts),
+        Err(e) => {
+            error!("parsing volume arg: {}", e);
+            return send(msg.channel_id, "???????", msg.tts)
+        },
     };
 
     let mut vol: f32 = (vol as f32)/100.0;  // force aliasing to reasonable values
@@ -83,6 +89,7 @@ pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     {
         let mut play_queue = queue_lock.write().unwrap();
         play_queue.volume = vol * DEFAULT_VOLUME;
+        info!("volume updated to {}", vol);
     }
 
     send(msg.channel_id, format!("volume adjusted{}", adjusted_text), msg.tts)?;

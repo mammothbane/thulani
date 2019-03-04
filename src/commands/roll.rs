@@ -294,7 +294,7 @@ pub fn roll(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
         Err(e) => {
             let parse_err = e.downcast::<CalcParseError>().unwrap();
             if let CalcParseError::NotReadToEnd { remaining } = parse_err {
-                error!("parsing {}: failed to consume '{}'", args.rest(), remaining);
+                error!("parsing '{}': failed to consume '{}'", args.rest(), remaining);
                 send(msg.channel_id, "I COULDN'T READ THAT YOU FUCK", msg.tts)
             } else {
                 Err(parse_err.into())

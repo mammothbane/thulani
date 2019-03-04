@@ -79,6 +79,7 @@ fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_only: bool) -> Resu
         },
         Err(e) => {
             return if let Some(NotFound) = e.downcast_ref::<DieselError>() {
+                info!("requested meme not found in database");
                 send(msg.channel_id, "c'mon baby, guesstimate", msg.tts)
             } else {
                 send(msg.channel_id, "what in ryan's name", msg.tts)?;
@@ -97,6 +98,7 @@ pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
         Ok(x) => x,
         Err(e) => {
             if let Some(NotFound) = e.downcast_ref::<DieselError>() {
+                info!("found no memes in history");
                 return send(msg.channel_id, "no one has ever memed before", msg.tts);
             }
 
@@ -118,6 +120,7 @@ pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
         },
         Err(e) => {
             if let Some(NotFound) = e.downcast_ref::<DieselError>() {
+                info!("last meme not found in database");
                 return send(msg.channel_id, "heuueueeeeh?", msg.tts);
             }
 
@@ -140,6 +143,7 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     let n = args.single_quoted::<usize>().unwrap_or(DEFAULT_HIST);
 
     if n > MAX_HIST {
+        debug!("user requested more than MAX_HIST ({}) items from history", MAX_HIST);
         send(msg.channel_id, "YER PUSHIN ME OVER THE FUCKIN LINE", true)?;
     }
 
@@ -148,9 +152,11 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     let records = InvocationRecord::last_n(&conn, n)?;
 
     if records.len() == 0 {
+        info!("no memes in history");
         return send(msg.channel_id, "i don't remember anything :(", msg.tts);
     }
 
+    info!("reporting meme history (len {})", n);
     let resp = records
         .into_iter()
         .enumerate()
@@ -206,18 +212,31 @@ pub fn addmeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
         .ok();
 
     if image.is_none() && text.is_none() {
+        warn!("tried to create non-audio meme with no image or text");
         return send(msg.channel_id, "hahAA it's empty xdddd", msg.tts);
     }
 
-    NewMeme {
+    let save_result = NewMeme {
         title,
         content: text,
         image_id: image,
         audio_id: None,
         metadata_id: 0,
-    }.save(&conn, msg.author.id.0).map(|_| {})?;
+    }.save(&conn, msg.author.id.0).map(|_| {});
 
-    msg.react("👌")
+    use diesel::result::DatabaseErrorKind;
+    match save_result {
+        Ok(_) => msg.react("👌"),
+        Err(e) => {
+            if let Some(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) = e.downcast_ref::<DieselError>() {
+                error!("tried to create meme that already exists");
+                msg.react("❌")?;
+                return send(msg.channel_id, "that meme already exists", msg.tts);
+            }
+
+            return Err(e);
+        }
+    }
 }
 
 pub fn addaudiomeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
@@ -295,24 +314,46 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
 
     let audio_id = Audio::create(&conn, audio_data, msg.author.id.0)?;
 
-    NewMeme {
+    let save_result = NewMeme {
         title,
         content: text,
         image_id: image,
         audio_id: Some(audio_id),
         metadata_id: 0,
-    }.save(&conn, msg.author.id.0).map(|_| {})?;
+    }.save(&conn, msg.author.id.0).map(|_| {});
 
-    msg.react("👌")
+    use diesel::result::DatabaseErrorKind;
+    match save_result {
+        Ok(_) => msg.react("👌"),
+        Err(e) => {
+            if let Some(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) = e.downcast_ref::<DieselError>() {
+                error!("tried to create meme that already exists");
+                msg.react("❌")?;
+                return send(msg.channel_id, "that meme already exists", msg.tts);
+            }
+
+            return Err(e);
+        }
+    }
 }
 
 pub fn delmeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     let title = args.single_quoted::<String>()?;
 
     let conn = connection()?;
-    delete_meme(&conn, &title, msg.author.id.0)?;
+    match delete_meme(&conn, &title, msg.author.id.0) {
+        Ok(_) => msg.react("💀"),
+        Err(e) => {
+            if let Some(NotFound) = e.downcast_ref::<DieselError>() {
+                msg.react("❓")?;
+                info!("attempted to delete nonexistent meme: '{}'", title);
+                send(msg.channel_id, "nice try", msg.tts)?;
+                return Ok(());
+            }
 
-    msg.react("💀")
+            Err(e)
+        }
+    }
 }
 
 pub fn stats(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
@@ -321,6 +362,8 @@ pub fn stats(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
 
     let conn = connection()?;
     let stats = db::stats(&conn)?;
+
+    debug!("reporting stats");
 
     let s = format!(
         r#"
@@ -363,9 +406,17 @@ fn rand_meme(ctx: &Context, message: &Message, audio_only: bool) -> Result<()> {
             InvocationRecord::create(&conn, message.author.id.0, message.id.0, mem.id, true)?;
             send_meme(ctx, &mem, &conn, message).map_err(Error::from)
         },
-        err @ Err(_) => {
-            send(message.channel_id, "i don't know any :(", message.tts)?;
-            err.map(|_| {})
+        Err(e) => {
+            match e.downcast_ref::<DieselError>() {
+                Some(NotFound) => {
+                    info!("random meme not found");
+                    return send(message.channel_id, "i don't know any :(", message.tts)
+                },
+                _ => {},
+            }
+
+            send(message.channel_id, "HELP", message.tts)?;
+            return Err(e);
         },
     }
 }
