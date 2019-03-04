@@ -1,4 +1,4 @@
-use failure::err_msg;
+use failure::Error;
 use nom::{
     self,
     double,
@@ -24,11 +24,30 @@ enum CalcExpr {
     Term(f64),
 }
 
+#[derive(Clone, Debug, PartialEq, Fail)]
+enum CalcParseError {
+    #[fail(display = "couldn't consume entire expression. remaining: '{}'.", remaining)]
+    NotReadToEnd {
+        remaining: String,
+    },
+    #[fail(display = "nom error: {}", _0)]
+    Nom(String),
+}
+
 impl CalcExpr {
     fn parse<S: AsRef<str>>(input: S) -> Result<Box<Self>> {
         parse_expr(CompleteStr(input.as_ref()))
-            .map(|(_, res)| res)
-            .map_err(|e| err_msg(format!("couldn't parse: {}", e)))
+            .map_err(|e| CalcParseError::Nom(format!("{}", e)))
+            .and_then(|(s, res)| {
+                if s.len() != 0 {
+                    Err(CalcParseError::NotReadToEnd {
+                        remaining: s.as_ref().to_owned(),
+                    })
+                } else {
+                    Ok(res)
+                }
+            })
+            .map_err(Error::from)
     }
 
     fn compute(self: Box<Self>) -> f64 {
@@ -270,6 +289,16 @@ mod test {
 }
 
 pub fn roll(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
-    let expr = CalcExpr::parse(args.rest())?;
-    send(msg.channel_id, &format!("{}", expr.compute()), msg.tts)
+    match CalcExpr::parse(args.rest()) {
+        Ok(expr) => send(msg.channel_id, &format!("{}", expr.compute()), msg.tts),
+        Err(e) => {
+            let parse_err = e.downcast::<CalcParseError>().unwrap();
+            if let CalcParseError::NotReadToEnd { remaining } = parse_err {
+                error!("parsing {}: failed to consume '{}'", args.rest(), remaining);
+                send(msg.channel_id, "I COULDN'T READ THAT YOU FUCK", msg.tts)
+            } else {
+                Err(parse_err.into())
+            }
+        },
+    }
 }
