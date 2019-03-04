@@ -1,7 +1,7 @@
 use failure::err_msg;
 use nom::{
     self,
-    digit,
+    double,
     types::CompleteStr,
 };
 use rand::prelude::*;
@@ -120,7 +120,7 @@ fn parse_term_or_paren(input: CompleteStr) -> nom::IResult<CompleteStr, Box<Calc
     ws!(input, alt_complete!(
         delimited!(char!('('), parse_expr, char!(')')) |
         do_parse!(
-            dat: flat_map!(digit, parse_to!(f64)) >>
+            dat: double >>
             (Box::new(CalcExpr::Term(dat)))
         )
     ))
