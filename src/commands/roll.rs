@@ -35,7 +35,7 @@ enum CalcParseError {
 }
 
 impl CalcExpr {
-    fn parse<S: AsRef<str>>(input: S) -> Result<Box<Self>> {
+    pub fn parse<S: AsRef<str>>(input: S) -> Result<Box<Self>> {
         parse_expr(CompleteStr(input.as_ref()))
             .map_err(|e| CalcParseError::Nom(format!("{}", e)))
             .and_then(|(s, res)| {
@@ -50,7 +50,7 @@ impl CalcExpr {
             .map_err(Error::from)
     }
 
-    fn compute(self: Box<Self>) -> f64 {
+    pub fn compute(self: Box<Self>) -> f64 {
         use self::CalcExpr::*;
         use self::BinOp::*;
         use self::UnaryOp::*;
@@ -138,7 +138,7 @@ fn parse_expr(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
 
 fn parse_add_sub_mod(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
     ws!(input, do_parse!(
-        tpl: tuple!(up_to_div_mul, ws!(one_of!("+-%")), up_to_div_mul) >>
+        tpl: tuple!(up_to_div_mul, ws!(one_of!("+-%")), parse_expr) >>
         ({
             let (expr1, op, expr2) = tpl;
             let op = match op {
@@ -154,7 +154,7 @@ fn parse_add_sub_mod(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcEx
 
 fn parse_div_mul(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
     ws!(input, do_parse!(
-        tpl: tuple!(up_to_binary_prefix, ws!(one_of!("/*")), up_to_binary_prefix) >>
+        tpl: tuple!(up_to_binary_prefix, ws!(one_of!("/*")), parse_expr) >>
         ({
             let (expr1, op, expr2) = tpl;
             let op = match op {
