@@ -1,4 +1,5 @@
 use failure::Error;
+use itertools::Itertools;
 use nom::{
     self,
     double,
@@ -26,8 +27,9 @@ enum CalcExpr {
 
 #[derive(Clone, Debug, PartialEq, Fail)]
 enum CalcParseError {
-    #[fail(display = "couldn't consume entire expression. remaining: '{}'.", remaining)]
+    #[fail(display = "couldn't consume entire expression. parsed: {:?}, remaining: '{}'.", parsed, remaining)]
     NotReadToEnd {
+        parsed: Box<CalcExpr>,
         remaining: String,
     },
     #[fail(display = "nom error: {}", _0)]
@@ -41,6 +43,7 @@ impl CalcExpr {
             .and_then(|(s, res)| {
                 if s.len() != 0 {
                     Err(CalcParseError::NotReadToEnd {
+                        parsed: res,
                         remaining: s.as_ref().to_owned(),
                     })
                 } else {
@@ -50,13 +53,43 @@ impl CalcExpr {
             .map_err(Error::from)
     }
 
-    pub fn compute(self: Box<Self>) -> f64 {
+    pub fn pretty(&self) -> String {
+        format!("```\n{}\n```", self.pretty_helper(0))
+    }
+
+    fn pretty_helper(&self, depth: usize) -> String {
+        match self {
+            CalcExpr::Binary(op, e1, e2) => {
+                let lines = vec! {
+                    format!("{}{:?} ({}) {{", "\t".repeat(depth), op, self.compute()),
+                    e1.pretty_helper(depth + 1),
+                    e2.pretty_helper(depth + 1),
+                    "\t".repeat(depth) + "}",
+                };
+
+                lines.into_iter().join("\n")
+            },
+            CalcExpr::Unary(op, e) => {
+                let lines = vec! {
+                    format!("{}{:?} ({}) {{", "\t".repeat(depth), op, self.compute()),
+                    e.pretty_helper(depth + 1),
+                    "\t".repeat(depth) + "}",
+                };
+
+                lines.into_iter().join("\n")
+            },
+            CalcExpr::Term(val) => {
+                format!("{}{}", "\t".repeat(depth), val)
+            }
+        }
+    }
+
+    pub fn compute(&self) -> f64 {
         use self::CalcExpr::*;
         use self::BinOp::*;
         use self::UnaryOp::*;
 
-        let s = *self;
-        match s {
+        match self {
             Binary(bop, e1, e2) => {
                 let r1 = e1.compute();
                 let r2 = e2.compute();
@@ -97,7 +130,7 @@ impl CalcExpr {
                     Round => r.round(),
                 }
             },
-            Term(v) => v,
+            Term(v) => *v,
         }
     }
 }
@@ -293,12 +326,26 @@ pub fn roll(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
         Ok(expr) => send(msg.channel_id, &format!("{}", expr.compute()), msg.tts),
         Err(e) => {
             let parse_err = e.downcast::<CalcParseError>().unwrap();
-            if let CalcParseError::NotReadToEnd { remaining } = parse_err {
+            if let CalcParseError::NotReadToEnd { remaining, .. } = parse_err {
                 error!("parsing '{}': failed to consume '{}'", args.rest(), remaining);
                 send(msg.channel_id, "I COULDN'T READ THAT YOU FUCK", msg.tts)
             } else {
                 Err(parse_err.into())
             }
         },
+    }
+}
+
+pub fn debug_expr(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+    match CalcExpr::parse(args.rest()) {
+        Ok(expr) => send(msg.channel_id, &expr.pretty(), false),
+        Err(e) => {
+            let parse_err = e.downcast::<CalcParseError>().unwrap();
+            if let CalcParseError::NotReadToEnd { remaining, parsed } = parse_err {
+                send(msg.channel_id, &format!("parsed this expr: {}\nwith remaining text: '{}'", parsed.pretty(), remaining), false)
+            } else {
+                Err(parse_err.into())
+            }
+        }
     }
 }

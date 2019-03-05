@@ -60,6 +60,11 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
             .desc("simulate rolling dice")
             .guild_only(true)
             .exec(roll::roll))
+        .command("debug_expr", |c| c
+            .desc("debug calculator expression")
+            .owners_only(true)
+            .exec(roll::debug_expr)
+        )
         .unrecognised_command(|ctx, msg, unrec| {
             let url = match msg.content.split_whitespace().skip(1).next() {
                 Some(x) if x.starts_with("http") => x,
