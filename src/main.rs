@@ -2,6 +2,7 @@
 #![feature(try_trait)]
 #![feature(pattern)]
 #![feature(concat_idents)]
+#![feature(associated_type_defaults)]
 
 #![feature(box_syntax, box_patterns)]
 
@@ -18,8 +19,6 @@ extern crate fnv;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 #[macro_use] extern crate nom;
-#[cfg(feature = "games")]
-extern crate oauth2;
 extern crate rand;
 extern crate regex;
 extern crate reqwest;
