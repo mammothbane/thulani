@@ -17,16 +17,6 @@ table! {
 }
 
 table! {
-    google_oauth_tokens (id) {
-        id -> Int4,
-        token -> Varchar,
-        refresh_token -> Varchar,
-        expiration -> Timestamp,
-        created -> Timestamp,
-    }
-}
-
-table! {
     images (id) {
         id -> Int4,
         data -> Bytea,
@@ -88,7 +78,6 @@ joinable!(invocation_records -> memes (meme_id));
 allow_tables_to_appear_in_same_query!(
     audio,
     audit_records,
-    google_oauth_tokens,
     images,
     invocation_records,
     memes,
