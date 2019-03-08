@@ -107,6 +107,8 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
         })
         .collect::<FnvHashSet<_>>();
 
+    let inferred = users.len() == 0;
+
     if users.len() == 0 {
         let pairs = guild
             .voice_states
@@ -128,7 +130,7 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
             .collect::<FnvHashSet<_>>();
     }
 
-    if users.len() < 2 {
+    if inferred && users.len() < 2 || !inferred && users.len() < 1 {
         info!("too few known users to make game comparison");
         send(msg.channel_id, "yer too lonely", msg.tts)?;
         return Ok(());
@@ -225,6 +227,5 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     use itertools::Itertools;
     let games_formatted = games_in_common.iter().join("\n");
 
-    send(msg.channel_id, &format!("games in common:\n{}", games_formatted), msg.tts)
+    send(msg.channel_id, &games_formatted, msg.tts)
 }
-
