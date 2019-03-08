@@ -13,12 +13,17 @@ extern crate dotenv;
 extern crate either;
 #[macro_use] extern crate failure;
 extern crate fern;
+extern crate fnv;
 #[cfg_attr(test, macro_use)] extern crate itertools;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 #[macro_use] extern crate nom;
+#[cfg(feature = "games")]
+extern crate oauth2;
 extern crate rand;
 extern crate regex;
+extern crate reqwest;
+#[macro_use] extern crate serde;
 extern crate serde_json;
 extern crate serenity;
 extern crate sha1;
@@ -45,7 +50,7 @@ use serenity::{
     },
     model::{
         gateway::Ready,
-        id::{GuildId, UserId},
+        id::{ChannelId, GuildId, UserId},
     },
     prelude::*,
 };
@@ -56,6 +61,19 @@ pub use self::util::*;
 #[cfg(feature = "diesel")]
 mod db;
 
+#[cfg(feature = "games")]
+mod game;
+
+#[cfg(not(feature = "games"))]
+mod game {
+    use serenity::framework::StandardFramework;
+
+    #[inline]
+    fn register(f: StandardFramework) -> StandardFramework {
+        return f
+    }
+}
+
 mod commands;
 mod util;
 mod audio;
@@ -65,6 +83,7 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 lazy_static! {
     static ref TARGET_GUILD: u64 = dotenv!("TARGET_GUILD").parse().expect("unable to parse TARGET_GUILD as u64");
     static ref TARGET_GUILD_ID: GuildId = GuildId(*TARGET_GUILD);
+    static ref VOICE_CHANNEL_ID: ChannelId = ChannelId(must_env_lookup::<u64>("VOICE_CHANNEL"));
 }
 
 struct Handler;
@@ -132,6 +151,8 @@ fn run() -> Result<()> {
         });
 
     framework = register_commands(framework);
+    framework = game::register(framework);
+
     client.with_framework(framework);
 
     let shard_manager = client.shard_manager.clone();
