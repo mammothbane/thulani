@@ -36,6 +36,7 @@ lazy_static! {
     static ref USER_MAP: FnvHashMap<UserId, String> = {
         use serde_json::Value;
         use std::str;
+
         let map_bytes = include_bytes!("../user_id_mapping.json");
 
         let v: Value = serde_json::from_str(str::from_utf8(&map_bytes[..]).unwrap()).unwrap();
@@ -53,7 +54,7 @@ lazy_static! {
     };
 }
 
-fn game(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+fn game(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     use fnv::{
         FnvHashMap,
         FnvHashSet,
@@ -70,27 +71,65 @@ fn game(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     let guild = guild
         .read();
 
-    let pairs = guild
-        .voice_states
-        .iter()
-        .filter_map(|(uid, voice)| {
-            voice.channel_id.map(|cid| (*uid, cid))
+    let user_args = args.multiple_quoted::<String>()?;
+
+    let mut users = user_args
+        .into_iter()
+        .map(|u| u.trim_start_matches("@").to_owned())
+        .filter_map(|u| {
+            let mut possible = guild.members_nick_containing(&u, false, false);
+            possible.extend(guild.members_username_containing(&u, false, false));
+
+            let possible = possible.into_iter()
+                .map(|member| member.user_id())
+                .collect::<FnvHashSet<_>>();
+
+            match possible.len() {
+                0 => {
+                    let _ = send(msg.channel_id, &format!("didn't recognize {}", u), msg.tts);
+                    None
+                },
+                1 => Some(possible.into_iter().next().unwrap()),
+                x => {
+                    let _ = send(msg.channel_id, &format!("too many matches ({}) for {}", x, u), msg.tts);
+                    None
+                },
+            }
         })
-        .collect::<FnvHashMap<_, _>>();
+        .filter_map(|uid| {
+            let res = USER_MAP.get(&uid).map(|s| s.to_lowercase());
 
-    let channel = pairs.get(&msg.author.id).unwrap_or(&*VOICE_CHANNEL_ID);
+            if let None = res {
+                let _ = info!("user {} is not recognized", uid);
+            }
 
-    let users = pairs
-        .iter()
-        .filter_map(|(uid, cid)| {
-            if cid == channel {
-                USER_MAP.get(uid).map(|s| s.to_lowercase())
-            } else { None }
+            res
         })
         .collect::<FnvHashSet<_>>();
 
+    if users.len() == 0 {
+        let pairs = guild
+            .voice_states
+            .iter()
+            .filter_map(|(uid, voice)| {
+                voice.channel_id.map(|cid| (*uid, cid))
+            })
+            .collect::<FnvHashMap<_, _>>();
+
+        let channel = pairs.get(&msg.author.id).unwrap_or(&*VOICE_CHANNEL_ID);
+
+        users = pairs
+            .iter()
+            .filter_map(|(uid, cid)| {
+                if cid == channel {
+                    USER_MAP.get(uid).map(|s| s.to_lowercase())
+                } else { None }
+            })
+            .collect::<FnvHashSet<_>>();
+    }
+
     if users.len() < 2 {
-        info!("too few known users in voice chat to make game comparison");
+        info!("too few known users to make game comparison");
         send(msg.channel_id, "yer too lonely", msg.tts)?;
         return Ok(());
     }
