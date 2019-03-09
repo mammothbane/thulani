@@ -77,7 +77,7 @@ enum AudioPlayback {
 
 fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_playback: AudioPlayback) -> Result<()> {
     if args.len() == 0 || audio_playback != AudioPlayback::Optional {
-        return rand_meme(ctx, msg, AudioPlayback::Required);
+        return rand_meme(ctx, msg, audio_playback);
     }
 
     let search = args.full();
