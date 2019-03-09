@@ -39,6 +39,7 @@ use crate::{
         *,
         rand_audio_meme as db_rand_audio_meme,
         rand_meme as db_rand_meme,
+        rand_silent_meme as db_rand_silent_meme,
     },
     Result,
 };
@@ -55,17 +56,28 @@ lazy_static! {
 
 #[inline]
 pub fn meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
-    _meme(ctx, msg, args, false)
+    _meme(ctx, msg, args, AudioPlayback::Optional)
 }
 
 #[inline]
 pub fn audio_meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
-    _meme(ctx, msg, args, true)
+    _meme(ctx, msg, args, AudioPlayback::Required)
 }
 
-fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_only: bool) -> Result<()> {
-    if args.len() == 0 || audio_only {
-        return rand_meme(ctx, msg, audio_only);
+pub fn silent_meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+    _meme(ctx, msg, args, AudioPlayback::Prohibited)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum AudioPlayback {
+    Required,
+    Optional,
+    Prohibited,
+}
+
+fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_playback: AudioPlayback) -> Result<()> {
+    if args.len() == 0 || audio_playback != AudioPlayback::Optional {
+        return rand_meme(ctx, msg, AudioPlayback::Required);
     }
 
     let search = args.full();
@@ -391,14 +403,15 @@ and {} were audio ({:0.1}%)"#,
     send(msg.channel_id, s, msg.tts)
 }
 
-fn rand_meme(ctx: &Context, message: &Message, audio_only: bool) -> Result<()> {
+fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) -> Result<()> {
     let conn = connection()?;
 
     let should_audio = ctx.users_listening()?;
-    let mem = if audio_only {
-        db_rand_audio_meme(&conn)
-    } else {
-        db_rand_meme(&conn, should_audio)
+
+    let mem = match audio_playback {
+        AudioPlayback::Required => db_rand_audio_meme(&conn),
+        AudioPlayback::Optional => db_rand_meme(&conn, should_audio),
+        AudioPlayback::Prohibited => db_rand_silent_meme(&conn),
     };
 
     match mem {
