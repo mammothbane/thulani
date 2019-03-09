@@ -100,7 +100,11 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
     let guild = guild
         .read();
 
-    let user_args = args.multiple_quoted::<String>()?;
+    let user_args = if args.rest().is_empty() {
+        Vec::new()
+    } else {
+        args.multiple_quoted::<String>()?
+    };
 
     let mut users = user_args
         .into_iter()
