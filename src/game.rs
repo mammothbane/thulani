@@ -1,5 +1,8 @@
+use std::iter;
+
 use failure::err_msg;
 use fnv::FnvHashMap;
+use itertools::Itertools;
 use serenity::{
     framework::standard::{
         Args,
@@ -11,6 +14,7 @@ use serenity::{
     },
     prelude::*,
 };
+use url::Url;
 
 use crate::{
     commands::send,
@@ -25,11 +29,19 @@ lazy_static! {
 }
 
 pub fn register(s: StandardFramework) -> StandardFramework {
-    s.command("game", |c| c
-        .known_as("gaem")
-        .desc("what game should we play?")
-        .exec(game)
-    )
+    s
+        .command("game", |c| c
+            .known_as("gaem")
+            .known_as("installedgaem")
+            .known_as("installedgame")
+            .desc("what game should we play?")
+            .exec(installedgame)
+        )
+        .command("ownedgame", |c| c
+            .known_as("ownedgaem")
+            .desc("what games does everyone have?")
+            .exec(ownedgame)
+        )
 }
 
 lazy_static! {
@@ -54,7 +66,23 @@ lazy_static! {
     };
 }
 
-fn game(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
+enum GameStatus {
+    Installed,
+    NotInstalled,
+    NotOwned,
+    Unknown,
+}
+
+fn installedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+    game(ctx, msg, args, GameStatus::Installed)
+}
+
+fn ownedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+    game(ctx, msg, args, GameStatus::NotInstalled)
+}
+
+fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -> Result<()> {
     use fnv::{
         FnvHashMap,
         FnvHashSet,
@@ -136,8 +164,6 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
         return Ok(());
     }
 
-    use url::Url;
-
     let mut u = Url::parse(
         &format!("https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchGet", *SPREADSHEET_ID))?;
 
@@ -176,14 +202,6 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
         })
         .collect::<FnvHashMap<_, _>>();
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    enum GameStatus {
-        Installed,
-        NotInstalled,
-        NotOwned,
-        Unknown,
-    }
-
     let user_games = user_indexes
         .iter()
         .map(|(user, col)| {
@@ -218,14 +236,32 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
         })
         .collect::<FnvHashMap<_, _>>();
 
-    let mut games_in_common = user_games.values().nth(0).unwrap()[&GameStatus::Installed].clone();
+    let statuses = vec![GameStatus::Installed, GameStatus::NotOwned, GameStatus::NotInstalled, GameStatus::Unknown]
+        .into_iter()
+        .filter(|s| s <= &min_status)
+        .collect::<Vec<_>>();
+
+    let mut games_in_common = {
+        let game_map = user_games.values().nth(0).unwrap();
+
+        statuses
+            .iter()
+            .fold(iter::empty().collect::<FnvHashSet<_>>(), |acc, s| {
+                acc.union(&game_map[s]).cloned().collect()
+            })
+    };
 
     for (_user, game_map) in user_games.iter() {
-        games_in_common = games_in_common.intersection(&game_map[&GameStatus::Installed]).cloned().collect();
+        let relevant_games = statuses
+            .iter()
+            .fold(iter::empty().collect::<FnvHashSet<_>>(), |acc, s| {
+                acc.union(&game_map[s]).cloned().collect()
+            });
+
+        games_in_common = games_in_common.intersection(&relevant_games).cloned().collect();
     }
 
-    use itertools::Itertools;
-    let games_formatted = games_in_common.iter().join("\n");
+    let games_formatted = games_in_common.iter().sorted().join("\n");
 
     send(msg.channel_id, &games_formatted, msg.tts)
 }
