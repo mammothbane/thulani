@@ -26,6 +26,7 @@ use crate::{
 lazy_static! {
     static ref SHEETS_API_KEY: String = must_env_lookup("SHEETS_API_KEY");
     static ref SPREADSHEET_ID: String = must_env_lookup("SPREADSHEET_ID");
+    static ref MAX_SHEET_COLUMN: String = must_env_lookup("MAX_SHEET_COLUMN");
 }
 
 pub fn register(s: StandardFramework) -> StandardFramework {
@@ -168,7 +169,7 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
         &format!("https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchGet", *SPREADSHEET_ID))?;
 
     u.query_pairs_mut()
-        .append_pair("ranges", "a1:p")
+        .append_pair("ranges", &format!("a1:{}", &*MAX_SHEET_COLUMN))
         .append_pair("valueRenderOption", "FORMATTED_VALUE")
         .append_pair("majorDimension", "COLUMNS")
         .append_pair("key", &*SHEETS_API_KEY);
