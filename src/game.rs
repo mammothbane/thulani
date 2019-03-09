@@ -261,7 +261,9 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
         games_in_common = games_in_common.intersection(&relevant_games).cloned().collect();
     }
 
-    let games_formatted = games_in_common.iter().sorted().join("\n");
+    let games_formatted = games_in_common.iter().sorted_by(|a, b| {
+        a.to_lowercase().cmp(&b.to_lowercase())
+    }).join("\n");
 
     send(msg.channel_id, &games_formatted, msg.tts)
 }
