@@ -1,7 +1,20 @@
-use std::iter;
+use std::{
+    iter,
+    result::Result as StdResult,
+    str::{
+        self,
+        FromStr,
+    },
+};
 
-use failure::err_msg;
-use fnv::FnvHashMap;
+use failure::{
+    err_msg,
+    Error,
+};
+use fnv::{
+    FnvHashMap,
+    FnvHashSet,
+};
 use itertools::Itertools;
 use serenity::{
     framework::standard::{
@@ -10,6 +23,7 @@ use serenity::{
     },
     model::{
         channel::Message,
+        guild::Guild,
         id::UserId,
     },
     prelude::*,
@@ -25,6 +39,7 @@ use crate::{
 
 lazy_static! {
     static ref SHEETS_API_KEY: String = must_env_lookup("SHEETS_API_KEY");
+    static ref STEAM_API_KEY: String = must_env_lookup("STEAM_API_KEY");
     static ref SPREADSHEET_ID: String = must_env_lookup("SPREADSHEET_ID");
     static ref MAX_SHEET_COLUMN: String = must_env_lookup("MAX_SHEET_COLUMN");
 }
@@ -43,27 +58,60 @@ pub fn register(s: StandardFramework) -> StandardFramework {
             .desc("what games does everyone have?")
             .exec(ownedgame)
         )
+        .command("updategame", |c| c
+            .known_as("updategaem")
+            .desc("update your games on the spreadsheet")
+            .owners_only(true)
+            .exec(updategaem)
+        )
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+struct UserInfo {
+    name: String,
+
+    #[serde(flatten)]
+    profile: ProfileInfo,
+}
+
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct ProfileInfo {
+    #[serde(rename = "steam")]
+    steam_id: Option<u64>,
+
+    #[serde(rename = "discord")]
+    discord_user_id: u64,
 }
 
 lazy_static! {
-    static ref USER_MAP: FnvHashMap<UserId, String> = {
-        use serde_json::Value;
-        use std::str;
+    static ref USER_MAP_STR: &'static str = str::from_utf8(&include_bytes!("../user_id_mapping.json")[..]).unwrap();
 
-        let map_bytes = include_bytes!("../user_id_mapping.json");
+    static ref USER_INFO_MAP: FnvHashMap<String, ProfileInfo> = {
+        let v: Vec<UserInfo> = serde_json::from_str(*USER_MAP_STR).unwrap();
 
-        let v: Value = serde_json::from_str(str::from_utf8(&map_bytes[..]).unwrap()).unwrap();
-        match v {
-            Value::Object(m) => {
-                m.iter()
-                    .map(|(k, v)| match v {
-                         Value::Number(n) => (UserId(n.as_u64().unwrap()), k.clone()),
-                         _ => panic!("non-number in user id mapping"),
-                    })
-                    .collect()
-            },
-            _ => panic!("couldn't read user id mapping"),
-        }
+        v.into_iter()
+            .map(|ui| {
+                let UserInfo { name, profile } = ui;
+
+                (name, profile)
+            })
+            .collect::<FnvHashMap<_, _>>()
+    };
+
+    static ref DISCORD_MAP: FnvHashMap<UserId, String> = {
+        USER_INFO_MAP.clone().into_iter()
+            .map(|(name, profile)| {
+                (UserId(profile.discord_user_id), name)
+            })
+            .collect::<FnvHashMap<_, _>>()
+    };
+
+    static ref STEAM_MAP: FnvHashMap<UserId, u64> = {
+        USER_INFO_MAP.clone().into_iter()
+            .filter_map(|(_, profile)| {
+                profile.steam_id.map(|sid| (UserId(profile.discord_user_id), sid))
+            })
+            .collect::<FnvHashMap<_, _>>()
     };
 }
 
@@ -75,12 +123,57 @@ enum GameStatus {
     Unknown,
 }
 
+impl FromStr for GameStatus {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        use std::char;
+
+        if s.starts_with("y") {
+            Ok(GameStatus::Installed)
+        } else if s.starts_with("n/i") {
+            Ok(GameStatus::Installed)
+        } else if s.starts_with("n") {
+            Ok(GameStatus::NotOwned)
+        } else if s.chars().all(char::is_whitespace) {
+            Ok(GameStatus::Unknown)
+        } else {
+            Err(err_msg(format!("unexpected status '{}'", s)))
+        }
+    }
+}
+
 fn installedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     game(ctx, msg, args, GameStatus::Installed)
 }
 
 fn ownedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     game(ctx, msg, args, GameStatus::NotInstalled)
+}
+
+#[derive(Copy, Clone, Debug, Fail, PartialEq, Eq, Hash)]
+enum UserLookupError {
+    #[fail(display = "too many possible options ({}) for query", _0)]
+    Ambiguous(usize),
+
+    #[fail(display = "user wasn't found in the guild")]
+    NotFound,
+}
+
+fn get_user_id<S: AsRef<str>>(g: &Guild, s: S) -> StdResult<UserId, UserLookupError> {
+    let s = s.as_ref().trim_start_matches("@").to_owned();
+    let mut possible = g.members_nick_containing(&s, false, false);
+    possible.extend(g.members_username_containing(&s, false, false));
+
+    let opts = possible.into_iter()
+        .map(|member| member.user_id())
+        .collect::<FnvHashSet<_>>();
+
+    match opts.len() {
+        0 => Err(UserLookupError::NotFound),
+        1 => Ok(opts.into_iter().next().unwrap()),
+        x => Err(UserLookupError::Ambiguous(x))
+    }
 }
 
 fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -> Result<()> {
@@ -108,29 +201,25 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
 
     let mut users = user_args
         .into_iter()
-        .map(|u| u.trim_start_matches("@").to_owned())
         .filter_map(|u| {
-            let mut possible = guild.members_nick_containing(&u, false, false);
-            possible.extend(guild.members_username_containing(&u, false, false));
+            use std::borrow::Borrow;
 
-            let possible = possible.into_iter()
-                .map(|member| member.user_id())
-                .collect::<FnvHashSet<_>>();
+            let possible = get_user_id(guild.borrow(), &u);
 
-            match possible.len() {
-                0 => {
-                    let _ = send(msg.channel_id, &format!("didn't recognize {}", u), msg.tts);
+            match possible {
+                Err(UserLookupError::NotFound) => {
+                    let _ = send(msg.channel_id, &format!("didn't recognize {}", &u), msg.tts);
                     None
                 },
-                1 => Some(possible.into_iter().next().unwrap()),
-                x => {
-                    let _ = send(msg.channel_id, &format!("too many matches ({}) for {}", x, u), msg.tts);
+                Ok(x) => Some(x),
+                Err(UserLookupError::Ambiguous(x)) => {
+                    let _ = send(msg.channel_id, &format!("too many matches ({}) for {}", x, &u), msg.tts);
                     None
                 },
             }
         })
         .filter_map(|uid| {
-            let res = USER_MAP.get(&uid).map(|s| s.to_lowercase());
+            let res = DISCORD_MAP.get(&uid).map(|s| s.to_lowercase());
 
             if let None = res {
                 let _ = info!("user {} is not recognized", uid);
@@ -157,7 +246,7 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
             .iter()
             .filter_map(|(uid, cid)| {
                 if cid == channel {
-                    USER_MAP.get(uid).map(|s| s.to_lowercase())
+                    DISCORD_MAP.get(uid).map(|s| s.to_lowercase())
                 } else { None }
             })
             .collect::<FnvHashSet<_>>();
@@ -169,33 +258,7 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
         return Ok(());
     }
 
-    let mut u = Url::parse(
-        &format!("https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchGet", *SPREADSHEET_ID))?;
-
-    u.query_pairs_mut()
-        .append_pair("ranges", &format!("a1:{}", &*MAX_SHEET_COLUMN))
-        .append_pair("valueRenderOption", "FORMATTED_VALUE")
-        .append_pair("majorDimension", "COLUMNS")
-        .append_pair("key", &*SHEETS_API_KEY);
-
-    let req = reqwest::Request::new(reqwest::Method::GET, u);
-
-    let client = reqwest::Client::new();
-
-    let mut resp = client.execute(req)?;
-
-    #[derive(Deserialize)]
-    struct Resp {
-        #[serde(rename = "valueRanges")]
-        value_ranges: Vec<Inner>,
-    }
-
-    #[derive(Deserialize)]
-    struct Inner {
-        values: Vec<Vec<String>>,
-    }
-
-    let data = &resp.json::<Resp>()?.value_ranges[0].values;
+    let data = load_spreadsheet()?;
 
     let user_indexes = (0..data.len())
         .filter_map(|i| {
@@ -207,6 +270,7 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
         })
         .collect::<FnvHashMap<_, _>>();
 
+    let data_ref = &data;
     let user_games = user_indexes
         .iter()
         .map(|(user, col)| {
@@ -223,18 +287,10 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
 
             (1..data[*col].len())
                 .for_each(|i| {
-                    let status = &data[*col][i];
+                    let status = &data_ref[*col][i].parse::<GameStatus>().unwrap_or(GameStatus::Unknown);
+                    let game = &data_ref[0][i];
 
-                    let game = &data[0][i];
-                    if status.starts_with("y") {
-                        game_map.get_mut(&GameStatus::Installed).unwrap().insert(game);
-                    } else if status.starts_with("n/i") {
-                        game_map.get_mut(&GameStatus::NotInstalled).unwrap().insert(game);
-                    } else if status.starts_with("n") {
-                        game_map.get_mut(&GameStatus::NotOwned).unwrap().insert(game);
-                    } else {
-                        game_map.get_mut(&GameStatus::Unknown).unwrap().insert(game);
-                    }
+                    game_map.get_mut(status).unwrap().insert(game);
                 });
 
             (user, game_map)
@@ -275,4 +331,152 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
     }
 
     send(msg.channel_id, &games_formatted, msg.tts)
+}
+
+fn load_spreadsheet() -> Result<Vec<Vec<String>>> {
+    let mut u = Url::parse(
+        &format!("https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchGet", *SPREADSHEET_ID))?;
+
+    u.query_pairs_mut()
+        .append_pair("ranges", &format!("a1:{}", &*MAX_SHEET_COLUMN))
+        .append_pair("valueRenderOption", "FORMATTED_VALUE")
+        .append_pair("majorDimension", "COLUMNS")
+        .append_pair("key", &*SHEETS_API_KEY);
+
+    let req = reqwest::Request::new(reqwest::Method::GET, u);
+
+    let client = reqwest::Client::new();
+
+    let mut resp = client.execute(req)?;
+
+    #[derive(Deserialize)]
+    struct Resp {
+        #[serde(rename = "valueRanges")]
+        value_ranges: Vec<Inner>,
+    }
+
+    #[derive(Deserialize)]
+    struct Inner {
+        values: Vec<Vec<String>>,
+    }
+
+    let resp = resp.json::<Resp>()?;
+
+    Ok(resp.value_ranges.into_iter().next().unwrap().values)
+}
+
+fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+    use regex::Regex;
+
+    let arg_user = args.single_quoted::<String>();
+
+    let user = if arg_user.is_err() {
+        msg.author.id.clone()
+    } else {
+        use std::borrow::Borrow;
+
+        let guild = msg.channel_id.to_channel()?
+            .guild()
+            .ok_or(err_msg("couldn't find guild"))?;
+
+        let guild = guild.read()
+            .guild()
+            .ok_or(err_msg("couldn't find guild"))?;
+
+        let guild = guild
+            .read();
+
+        get_user_id(guild.borrow(), arg_user.unwrap()).map_err(Error::from)?
+    };
+
+    let username = match DISCORD_MAP.get(&user) {
+        Some(s) => s,
+        None => return send(msg.channel_id, "WHO THE FUCK ARE YE", msg.tts),
+    };
+
+    let steam_id = match STEAM_MAP.get(&msg.author.id) {
+        Some(u) => u,
+        None => return send(msg.channel_id, "WHO ARE YE ON STEAM", msg.tts),
+    };
+
+    let spreadsheet = load_spreadsheet()?;
+
+    let user_column = (0..spreadsheet.len())
+        .find(|x| spreadsheet[*x][0].to_lowercase() == username.to_lowercase());
+
+    let user_column = match user_column {
+        Some(c) => &spreadsheet[c][1..],
+        None => return send(msg.channel_id, "YER NOT IN THE SPREADSHEET", msg.tts),
+    };
+
+    lazy_static! {
+        static ref APPID_REGEX: Regex = Regex::new(r#"(?i)^\s*app\s*id\s*$"#).unwrap();
+    }
+
+    let appid_column = (0..spreadsheet.len())
+        .find(|x| APPID_REGEX.is_match(&spreadsheet[*x][0]));
+
+    let appid_column = match appid_column {
+        Some(c) => &spreadsheet[c][1..],
+        None => {
+            error!("didn't find an appid column in the spreadsheet");
+            return send(msg.channel_id, "SPREADSHEET BROKE", msg.tts)
+        },
+    };
+
+    let unknown_appids = (0..user_column.len())
+        .filter_map(|x| user_column[x].parse::<GameStatus>().ok().map(|s| (x, s)))
+        .filter(|(_, s)| *s == GameStatus::Unknown)
+        .filter_map(|(x, _)| appid_column
+            .get(x)
+            .and_then(|s| s.parse::<u64>().ok().map(|appid| (appid, x))));
+
+    let mut u = Url::parse("https://api.steampowered.com/IPlayerService/GetOwnedGames/v1")?;
+
+    u.query_pairs_mut()
+        .append_pair("key", &*STEAM_API_KEY)
+        .append_pair("include_played_free_games", "1")
+        .append_pair("steamid", &steam_id.to_string());
+
+    #[derive(Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+    struct SteamResp {
+        response: SteamInner,
+    }
+
+    #[derive(Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+    struct SteamInner {
+        games: Vec<SteamGameEntry>,
+    }
+
+    #[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    struct SteamGameEntry {
+        #[serde(rename = "appid")]
+        app_id: u64,
+
+        #[serde(rename = "playtime_forever")]
+        play_time: u64,
+    }
+
+    let games_owned= reqwest::get(u)?
+        .json::<SteamResp>()?
+        .response.games
+        .into_iter()
+        .map(|ge| ge.app_id)
+        .collect::<FnvHashSet<_>>();
+
+    let found = unknown_appids
+        .filter_map(|(ai, x)| if games_owned.contains(&ai) {
+            Some(x.to_string())
+        } else {
+            None
+        })
+        .collect::<Vec<_>>();
+
+    if found.len() > 0 {
+        info!("found games at positions\n{}", found.join("\n"));
+    } else {
+        info!("no games to update");
+    }
+
+    Ok(())
 }
