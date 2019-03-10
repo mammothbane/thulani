@@ -133,7 +133,7 @@ impl FromStr for GameStatus {
         if s.starts_with("y") {
             Ok(GameStatus::Installed)
         } else if s.starts_with("n/i") {
-            Ok(GameStatus::Installed)
+            Ok(GameStatus::NotInstalled)
         } else if s.starts_with("n") {
             Ok(GameStatus::NotOwned)
         } else if s.chars().all(char::is_whitespace) {
