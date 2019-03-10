@@ -469,9 +469,9 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         },
     };
 
-    let unknown_appids = (0..user_column.len())
+    let missing_appids = (0..user_column.len())
         .filter_map(|x| user_column[x].parse::<GameStatus>().ok().map(|s| (x, s)))
-        .filter(|(_, s)| *s == GameStatus::Unknown)
+        .filter(|(_, s)| *s == GameStatus::Unknown || *s == GameStatus::NotInstalled)
         .filter_map(|(x, _)| appid_column
             .get(x)
             .and_then(|s| s.parse::<u64>().ok().map(|appid| (appid, x))));
@@ -509,7 +509,7 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         .map(|ge| ge.app_id)
         .collect::<FnvHashSet<_>>();
 
-    let found_games = unknown_appids
+    let found_games = missing_appids
         .filter_map(|(ai, x)| if games_owned.contains(&ai) {
             Some(&spreadsheet[0][x + 1])
         } else {
