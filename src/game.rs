@@ -61,7 +61,6 @@ pub fn register(s: StandardFramework) -> StandardFramework {
         .command("updategame", |c| c
             .known_as("updategaem")
             .desc("update your games on the spreadsheet")
-            .owners_only(true)
             .exec(updategaem)
         )
 }
@@ -410,7 +409,7 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         None => return send(msg.channel_id, "WHO THE FUCK ARE YE", msg.tts),
     };
 
-    let steam_id = match STEAM_MAP.get(&msg.author.id) {
+    let steam_id = match STEAM_MAP.get(&user) {
         Some(u) => u,
         None => return send(msg.channel_id, "WHO ARE YE ON STEAM", msg.tts),
     };
@@ -489,11 +488,10 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         .join("\n");
 
     if found_games.len() > 0 {
-        send(msg.channel_id, &format!("you own {} games that you should add to the list:\n{}",
+        send(msg.channel_id, &format!("{} games owned on steam that are missing from the list:\n{}",
                                       found_games.chars().filter(|x| *x == '\n').count() + 1,
                                       found_games), msg.tts)
     } else {
-        send(msg.channel_id, "you're up to date", msg.tts)
+        send(msg.channel_id, "up to date", msg.tts)
     }
-
 }
