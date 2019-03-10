@@ -113,6 +113,8 @@ lazy_static! {
             })
             .collect::<FnvHashMap<_, _>>()
     };
+
+    static ref ALPHABET: Vec<char> = (0..26).map(|x| (x + b'a') as char).collect();
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
@@ -365,6 +367,20 @@ fn load_spreadsheet() -> Result<Vec<Vec<String>>> {
     Ok(resp.value_ranges.into_iter().next().unwrap().values)
 }
 
+fn to_spreadsheet_alpha(mut x: usize) -> String {
+    let mut result = String::new();
+
+    result.push(ALPHABET[x % 26]);
+    x /= 26;
+
+    while x != 0 {
+        result.push(ALPHABET[x % 26]);
+        x /= 26;
+    }
+
+    result.chars().rev().collect()
+}
+
 fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     use regex::Regex;
 
@@ -464,19 +480,20 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         .map(|ge| ge.app_id)
         .collect::<FnvHashSet<_>>();
 
-    let found = unknown_appids
+    let found_games = unknown_appids
         .filter_map(|(ai, x)| if games_owned.contains(&ai) {
-            Some(x.to_string())
+            Some(&spreadsheet[0][x + 1])
         } else {
             None
         })
-        .collect::<Vec<_>>();
+        .join("\n");
 
-    if found.len() > 0 {
-        info!("found games at positions\n{}", found.join("\n"));
+    if found_games.len() > 0 {
+        send(msg.channel_id, &format!("you own {} games that you should add to the list:\n{}",
+                                      found_games.chars().filter(|x| *x == '\n').count() + 1,
+                                      found_games), msg.tts)
     } else {
-        info!("no games to update");
+        send(msg.channel_id, "you're up to date", msg.tts)
     }
 
-    Ok(())
 }
