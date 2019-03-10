@@ -471,7 +471,7 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
     let missing_appids = (0..user_column.len())
         .filter_map(|x| user_column[x].parse::<GameStatus>().ok().map(|s| (x, s)))
-        .filter(|(_, s)| *s == GameStatus::Unknown || *s == GameStatus::NotInstalled)
+        .filter(|(_, s)| *s == GameStatus::Unknown || *s == GameStatus::NotOwned)
         .filter_map(|(x, _)| appid_column
             .get(x)
             .and_then(|s| s.parse::<u64>().ok().map(|appid| (appid, x))));
