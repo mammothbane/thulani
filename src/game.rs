@@ -162,11 +162,37 @@ enum UserLookupError {
 }
 
 fn get_user_id<S: AsRef<str>>(g: &Guild, s: S) -> StdResult<UserId, UserLookupError> {
-    let s = s.as_ref().trim_start_matches("@").to_owned();
-    let mut possible = g.members_nick_containing(&s, false, false);
-    possible.extend(g.members_username_containing(&s, false, false));
+    let s = s.as_ref().trim_start_matches("@").to_lowercase();
 
-    let opts = possible.into_iter()
+    if let Some(info) = USER_INFO_MAP.get(&s) {
+        return Ok(UserId(info.discord_user_id));
+    }
+
+    let nicks = g.members_nick_containing(&s, false, false);
+
+    {
+        let exact_match = nicks
+            .iter()
+            .find(|m| m.user.read().name.to_lowercase() == s);
+
+        if let Some(m) = exact_match {
+            return Ok(m.user_id());
+        }
+    }
+
+    let usernames = g.members_username_containing(&s, false, false);
+
+    {
+        let exact_match = usernames
+            .iter()
+            .find(|m| m.user.read().name.to_lowercase() == s);
+
+        if let Some(m) = exact_match {
+            return Ok(m.user_id());
+        }
+    }
+
+    let opts = nicks.into_iter().chain(usernames.into_iter())
         .map(|member| member.user_id())
         .collect::<FnvHashSet<_>>();
 
@@ -206,6 +232,8 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
             use std::borrow::Borrow;
 
             let possible = get_user_id(guild.borrow(), &u);
+
+            debug!("parsed userid {:?}", possible);
 
             match possible {
                 Err(UserLookupError::NotFound) => {
@@ -403,6 +431,8 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
         get_user_id(guild.borrow(), arg_user.unwrap()).map_err(Error::from)?
     };
+
+    debug!("parsed userid {:?}", user);
 
     let username = match DISCORD_MAP.get(&user) {
         Some(s) => s,
