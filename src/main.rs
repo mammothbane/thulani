@@ -136,6 +136,10 @@ fn run() -> Result<()> {
                     trace!("command '{}' completed successfully", cmd);
                 },
                 Err(e) => {
+                    if let Err(e) = msg.react("❌") {
+                        error!("reacting to failed message: {}", e);
+                    }
+
                     if let Err(e) = crate::commands::send(msg.channel_id, "BANIC", msg.tts) {
                         error!("sending BANIC: {}", e);
                     }
