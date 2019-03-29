@@ -1,3 +1,5 @@
+use std::result::Result as StdResult;
+
 use rand::prelude::*;
 use serenity::{
     framework::standard::Args,
@@ -15,8 +17,20 @@ use crate::{
 #[grammar = "commands/calc.pest"]
 struct Calc;
 
+#[derive(Copy, Clone, Fail, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum CalcError {
+    #[fail(display = "pest was unable to parse the input")]
+    Pest,
+
+    #[fail(display = "invalid number format")]
+    NumberFormat,
+
+    #[fail(display = "bad argument count")]
+    ArgCount,
+}
+
 impl Calc {
-    fn eval<S: AsRef<str>>(s: S) -> Result<f64> {
+    fn eval<S: AsRef<str>>(s: S) -> StdResult<f64, CalcError> {
         use pest::{
             Parser,
             prec_climber::PrecClimber,
@@ -41,10 +55,10 @@ impl Calc {
             };
         }
 
-        let result = Calc::parse(calc, s.as_ref())?;
+        let result = Calc::parse(calc, s.as_ref()).map_err(|_| CalcError::Pest)?;
 
-        fn eval_single_pair(pair: Pair<self::Rule>) -> f64 {
-            match pair.as_rule() {
+        fn eval_single_pair(pair: Pair<self::Rule>) -> StdResult<f64, CalcError> {
+            let result = match pair.as_rule() {
                 oct | hex | binary => {
                     let base = match pair.as_rule() {
                         hex => 16,
@@ -53,15 +67,15 @@ impl Calc {
                         _ => unreachable!(),
                     };
 
-                    u64::from_str_radix(&pair.as_str()[2..], base).unwrap() as f64
+                    u64::from_str_radix(&pair.as_str()[2..], base).map_err(|_| CalcError::NumberFormat)? as f64
                 },
-                float => pair.as_str().parse::<f64>().unwrap(),
-                expr | num => eval_expr(pair.into_inner()),
+                float => pair.as_str().parse::<f64>().map_err(|_| CalcError::NumberFormat)?,
+                expr | num => eval_expr(pair.into_inner())?,
                 unary_expr => {
                     let mut p = pair.into_inner();
 
-                    let op = p.next().unwrap();
-                    let arg = eval_expr(p);
+                    let op = p.next().ok_or(CalcError::ArgCount)?;
+                    let arg = eval_expr(p)?;
 
                     match op.as_rule() {
                         log => arg.ln(),
@@ -93,10 +107,10 @@ impl Calc {
                 binary_expr => {
                     let mut p = pair.into_inner();
 
-                    let op = p.next().unwrap();
+                    let op = p.next().ok_or(CalcError::ArgCount)?;
 
-                    let arg1 = eval_single_pair(p.next().unwrap());
-                    let arg2 = eval_single_pair(p.next().unwrap());
+                    let arg1 = eval_single_pair(p.next().ok_or(CalcError::ArgCount)?)?;
+                    let arg2 = eval_single_pair(p.next().ok_or(CalcError::ArgCount)?)?;
 
                     assert!(p.next().is_none());
 
@@ -110,8 +124,8 @@ impl Calc {
                 suffix_expr => {
                     let mut p = pair.into_inner();
 
-                    let arg = eval_expr(p.next().unwrap().into_inner());
-                    let op = p.next().unwrap();
+                    let arg = eval_expr(p.next().ok_or(CalcError::ArgCount)?.into_inner())?;
+                    let op = p.next().ok_or(CalcError::ArgCount)?;
 
                     assert!(p.next().is_none());
 
@@ -121,32 +135,43 @@ impl Calc {
                     }
                 },
                 _ => unreachable!(),
-            }
+            };
+
+            Ok(result)
         }
 
-        fn eval_expr(p: Pairs<self::Rule>) -> f64 {
+        fn eval_expr(p: Pairs<self::Rule>) -> StdResult<f64, CalcError> {
             CLIMBER.climb(
                 p,
-                eval_single_pair,
-                |lhs: f64, op, rhs: f64| match op.as_rule() {
-                    add => lhs + rhs,
-                    sub => lhs - rhs,
-                    mul => lhs * rhs,
-                    div => lhs / rhs,
-                    pow => lhs.powf(rhs),
-                    dice => {
-                        let dice_count = lhs as usize;
-                        let dice_faces = rhs as usize;
+                |pair| {
+                    eval_single_pair(pair)
+                },
+                |lhs, op, rhs| {
+                    let lhs = lhs?;
+                    let rhs = rhs?;
 
-                        let mut rng = thread_rng();
-                        (0..dice_count).map(|_| rng.gen_range(1, dice_faces + 1)).sum::<usize>() as f64
-                    },
-                    _ => unreachable!(),
+                    let result = match op.as_rule() {
+                        add => lhs + rhs,
+                        sub => lhs - rhs,
+                        mul => lhs * rhs,
+                        div => lhs / rhs,
+                        pow => lhs.powf(rhs),
+                        dice => {
+                            let dice_count = lhs as usize;
+                            let dice_faces = rhs as usize;
+
+                            let mut rng = thread_rng();
+                            (0..dice_count).map(|_| rng.gen_range(1, dice_faces + 1)).sum::<usize>() as f64
+                        },
+                        _ => unreachable!(),
+                    };
+
+                    Ok(result)
                 }
             )
         }
 
-        Ok(eval_expr(result))
+        eval_expr(result)
     }
 }
 
