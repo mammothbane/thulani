@@ -4,7 +4,8 @@ version = "0.1.6"
 authors = ["Nathan Perry <avaglir@gmail.com>"]
 
 [features]
-default = ["diesel", "games"]
+default = ["db", "games"]
+db = ["diesel", "postgres", "r2d2_postgres"]
 games = []
 
 [dependencies]
@@ -33,6 +34,8 @@ statrs = "^0.10"
 fnv = "~1.0"
 pest = "~2.1"
 pest_derive = "~2.1"
+postgres = { version = "^0.15", optional = true, features = ["with-chrono"] }
+r2d2_postgres = { version = "^0.14", optional = true }
 
 [dependencies.serenity]
 default-features = false

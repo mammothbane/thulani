@@ -7,7 +7,7 @@
 #![feature(box_syntax, box_patterns)]
 
 extern crate chrono;
-#[cfg(feature = "diesel")]
+#[cfg(feature = "db")]
 #[macro_use] extern crate diesel;
 extern crate dotenv;
 #[macro_use] extern crate dotenv_codegen;
@@ -20,6 +20,8 @@ extern crate fnv;
 #[macro_use] extern crate log;
 extern crate pest;
 #[macro_use] extern crate pest_derive;
+#[cfg(feature = "db")] extern crate postgres;
+#[cfg(feature = "db")] extern crate r2d2_postgres;
 extern crate rand;
 extern crate regex;
 extern crate reqwest;

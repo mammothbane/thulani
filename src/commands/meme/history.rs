@@ -141,11 +141,22 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 pub fn stats(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
     use db;
     use chrono;
+    use serenity::model::{
+        id::UserId,
+        user::User,
+    };
+    use crate::TARGET_GUILD_ID;
 
     let conn = connection()?;
     let stats = db::stats(&conn)?;
 
     debug!("reporting stats");
+
+    let rand_user: User = UserId(stats.most_random_meme_user).to_user()?;
+    let direct_user: User = UserId(stats.most_directly_named_meme_user).to_user()?;
+
+    let rand_user = rand_user.nick_in(*TARGET_GUILD_ID).unwrap_or(rand_user.name);
+    let direct_user = direct_user.nick_in(*TARGET_GUILD_ID).unwrap_or(direct_user.name);
 
     let s = format!(
         r#"
@@ -156,7 +167,16 @@ pub fn stats(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
 started recording meme invocations on {} ({})
 {} total meme invocations recorded
 {} of which were random ({:0.1}%)
-and {} were audio ({:0.1}%)"#,
+and {} were audio ({:0.1}%)
+
+the most active day was {} with {} memes
+and the loudest day was {} with {} audio memes
+
+{} has invoked the most random memes ({})
+{} has invoked the most memes by name ({})
+
+{} was the meme most requested by name ({})
+and {} was the most-memed overall ({})"#,
         stats.memes_overall,
         stats.audio_memes,
         (stats.audio_memes as f64) / (stats.memes_overall as f64) * 100.,
@@ -169,6 +189,12 @@ and {} were audio ({:0.1}%)"#,
         (stats.random_meme_invocations as f64) / (stats.total_meme_invocations as f64) * 100.,
         stats.audio_meme_invocations,
         (stats.audio_meme_invocations as f64) / (stats.total_meme_invocations as f64) * 100.,
+        stats.most_active_day, stats.most_active_day_count,
+        stats.most_audio_active_day, stats.most_audio_active_count,
+        rand_user, stats.most_random_meme_user_count,
+        direct_user, stats.most_directly_named_meme_count,
+        stats.most_popular_named_meme, stats.most_popular_named_meme_count,
+        stats.most_popular_meme_overall, stats.most_popular_meme_overall_count,
     );
     send(msg.channel_id, s, msg.tts)
 }

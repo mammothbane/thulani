@@ -4,6 +4,7 @@ use std::{
 };
 
 use chrono::{
+    Date,
     DateTime,
     Utc,
 };
@@ -11,6 +12,10 @@ use diesel::{
     NotFound,
     prelude::*,
     r2d2::{ConnectionManager, ManageConnection},
+};
+use r2d2_postgres::{
+    PostgresConnectionManager as RawPgConnMgr,
+    TlsMode,
 };
 
 use crate::{Error, Result};
@@ -24,6 +29,7 @@ mod models;
 lazy_static! {
     static ref DB_URL: String = env::var("DATABASE_URL").expect("no database url in environment").into();
     static ref CONN_MGR: ConnectionManager<PgConnection> = ConnectionManager::new(DB_URL.clone());
+    static ref RAW_CONN_MGR: RawPgConnMgr = RawPgConnMgr::new(DB_URL.clone(), TlsMode::None).unwrap();
 }
 
 pub fn connection() -> Result<PgConnection> {
@@ -179,7 +185,7 @@ pub fn rand_silent_meme(conn: &PgConnection) -> Result<Meme> {
         .map_err(Error::from)
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct Stats {
     pub memes_overall: usize,
     pub audio_memes: usize,
@@ -188,11 +194,41 @@ pub struct Stats {
     pub total_meme_invocations: usize,
     pub audio_meme_invocations: usize,
     pub random_meme_invocations: usize,
+
+    pub most_active_day: Date<Utc>,
+    pub most_active_day_count: usize,
+
+    pub most_audio_active_day: Date<Utc>,
+    pub most_audio_active_count: usize,
+
+    pub most_random_meme_user: u64,
+    pub most_random_meme_user_count: usize,
+    pub most_directly_named_meme_user: u64,
+    pub most_directly_named_meme_count: usize,
+
+    pub most_popular_named_meme: String,
+    pub most_popular_named_meme_count: usize,
+
+    pub most_popular_meme_overall: String,
+    pub most_popular_meme_overall_count: usize,
 }
 
 pub fn stats(conn: &PgConnection) -> Result<Stats> {
     use diesel::dsl::{count_star, count};
-    use chrono::NaiveDateTime;
+    use chrono::{
+        NaiveDateTime,
+        NaiveDate,
+    };
+
+    #[inline]
+    fn to_utc(ndt: NaiveDateTime) -> DateTime<Utc> {
+        DateTime::from_utc(ndt, Utc{})
+    }
+
+    #[inline]
+    fn to_utc_date(nd: NaiveDate) -> Date<Utc> {
+        Date::from_utc(nd, Utc{})
+    }
 
     let total_count: i64 = memes::table
         .select(count_star())
@@ -217,7 +253,7 @@ pub fn stats(conn: &PgConnection) -> Result<Stats> {
         .first(conn)
         .map_err(Error::from)?;
 
-    let started_recording = DateTime::from_utc(started_recording, Utc{});
+    let started_recording = to_utc(started_recording);
 
     let total_meme_invocations: i64 = invocation_records::table
         .select(count_star())
@@ -237,6 +273,87 @@ pub fn stats(conn: &PgConnection) -> Result<Stats> {
         .first(conn)
         .map_err(Error::from)?;
 
+    let raw_conn = RAW_CONN_MGR.connect().map_err(Error::from)?;
+
+    let rows = raw_conn.query(r#"
+    SELECT DATE(time) as dt, COUNT(*) FROM invocation_records
+    GROUP BY dt
+    ORDER BY COUNT(*) DESC
+    LIMIT 1;
+    "#, &[])?;
+
+    let row = rows.get(0);
+
+    let most_active_day = to_utc_date(row.get(0));
+    let most_active_day_count: i64 = row.get(1);
+
+    let rows = raw_conn.query(r#"
+    SELECT DATE(time) as dt, COUNT(*) FROM invocation_records
+    INNER JOIN memes ON invocation_records.meme_id = memes.id
+    WHERE memes.audio_id IS NOT NULL
+    GROUP BY dt
+    ORDER BY COUNT(*) DESC
+    LIMIT 1;
+    "#, &[])?;
+
+    let row = rows.get(0);
+
+    let most_active_audio_day = to_utc_date(row.get(0));
+    let most_active_audio_day_count: i64 = row.get(1);
+
+    let rows = raw_conn.query(r#"
+    SELECT user_id, COUNT(*) FROM invocation_records
+    WHERE random IS TRUE
+    GROUP BY user_id
+    ORDER BY COUNT(*) DESC
+    LIMIT 1;
+    "#, &[])?;
+
+    let row = rows.get(0);
+
+    let most_random_invoker: i64 = row.get(0);
+    let most_random_invoker_count: i64 = row.get(1);
+
+    let rows = raw_conn.query(r#"
+    SELECT user_id, COUNT(*) FROM invocation_records
+    WHERE random IS FALSE
+    GROUP BY user_id
+    ORDER BY COUNT(*) DESC
+    LIMIT 1;
+    "#, &[])?;
+
+    let row = rows.get(0);
+
+    let most_specific_invoker: i64 = row.get(0);
+    let most_specific_invoker_count: i64 = row.get(1);
+
+    let rows = raw_conn.query(r#"
+    SELECT memes.title, COUNT(*) FROM invocation_records
+    INNER JOIN memes ON meme_id = memes.id
+    WHERE random IS FALSE
+    GROUP BY memes.title
+    ORDER BY COUNT(*) DESC
+    LIMIT 1;
+    "#, &[])?;
+
+    let row = rows.get(0);
+
+    let most_requested_meme = row.get(0);
+    let most_requested_meme_count: i64 = row.get(1);
+
+    let rows = raw_conn.query(r#"
+    SELECT memes.title, COUNT(*) FROM invocation_records
+    INNER JOIN memes ON meme_id = memes.id
+    GROUP BY memes.title
+    ORDER BY COUNT(*) DESC
+    LIMIT 1;
+    "#, &[])?;
+
+    let row = rows.get(0);
+
+    let most_invoked_meme = row.get(0);
+    let most_invoked_meme_count: i64 = row.get(1);
+
     Ok(Stats {
         memes_overall: total_count as usize,
         image_memes: image_count as usize,
@@ -245,5 +362,21 @@ pub fn stats(conn: &PgConnection) -> Result<Stats> {
         total_meme_invocations: total_meme_invocations as usize,
         audio_meme_invocations: audio_meme_invocations as usize,
         random_meme_invocations: random_meme_invocations as usize,
+
+        most_active_day,
+        most_active_day_count: most_active_day_count as usize,
+        most_audio_active_day: most_active_audio_day,
+        most_audio_active_count: most_active_audio_day_count as usize,
+
+        most_random_meme_user: most_random_invoker as u64,
+        most_random_meme_user_count: most_random_invoker_count as usize,
+        most_directly_named_meme_user: most_specific_invoker as u64,
+        most_directly_named_meme_count: most_specific_invoker_count as usize,
+
+        most_popular_named_meme: most_requested_meme,
+        most_popular_named_meme_count: most_requested_meme_count as usize,
+
+        most_popular_meme_overall: most_invoked_meme,
+        most_popular_meme_overall_count: most_invoked_meme_count as usize,
     })
 }
