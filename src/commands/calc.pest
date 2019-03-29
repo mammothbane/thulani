@@ -1,0 +1,79 @@
+num = {
+    hex
+    | oct
+    | binary
+    | float
+}
+
+float = @{ int ~ ( "." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
+    int = { "-"? ~ ASCII_DIGIT+ }
+
+hex = @{ "0x" ~ ASCII_HEX_DIGIT+ }
+oct = @{ "0o" ~ ASCII_OCT_DIGIT+ }
+binary = @{ "0b" ~ ASCII_BIN_DIGIT+ }
+
+infix = _{ add | sub | mul | div | modulo }
+    add = { "+" }
+    sub = { "-" }
+    modulo = { "%" | "mod" }
+    mul = { "*" }
+    div = { "/" }
+
+tight_infix = _{ dice | pow }
+	dice = { "d" }
+	pow = { "^" }
+
+trig = _{ sin | cos | tan | asin | acos | atan }
+    sin = { "sin" }
+    cos = { "cos" }
+    tan = { "tan" }
+    asin = { "asin" }
+    acos = { "acos" }
+    atan = { "atan" }
+
+htrig = _{ sinh | cosh | tanh | asinh | acosh | atanh }
+    sinh = { "sinh" }
+    cosh = { "cosh" }
+    tanh = { "tanh" }
+    asinh = { "asinh" }
+    acosh = { "acosh" }
+    atanh = { "atanh" }
+
+unary_prefix = _{ log | sqrt | sgn | htrig | trig | exp | abs | ceil | floor | round }
+    log = { "log" | "ln" }
+    sqrt = { "sqrt" }
+    sgn = { "sgn" }
+    exp = { "exp" }
+    abs = { "abs" }
+    ceil = { "ceil" }
+    floor = { "floor" }
+    round = { "round" }
+
+binary_prefix = _{ min | max | atan2 }
+    min = { "min" }
+    max = { "max" }
+    atan2 = { "atan2" }
+
+suffix = _{ factorial }
+    factorial = { "!" }
+
+term = _{ num | "(" ~ expr ~ ")" }
+
+suffix_expr = { term ~ suffix }
+unary_expr = ${ unary_prefix ~ ws+ ~ outfix_expr }
+binary_expr = ${ binary_prefix ~ ws+ ~ outfix_expr ~ ws+ ~ outfix_expr }
+
+tight = _{ (suffix_expr | term) ~ (tight_infix ~ tight)* }
+
+expr = { outfix_expr ~ (infix ~ outfix_expr)* }
+
+outfix_expr = _{
+    tight |
+    binary_expr |
+    unary_expr
+}
+
+calc = _{ SOI ~ expr ~ EOI }
+
+ws = _{ " " | "\t" | "\n" }
+WHITESPACE = _{ ws }

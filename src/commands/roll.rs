@@ -1,10 +1,3 @@
-use failure::Error;
-use itertools::Itertools;
-use nom::{
-    self,
-    double,
-    types::CompleteStr,
-};
 use rand::prelude::*;
 use serenity::{
     framework::standard::Args,
@@ -18,334 +11,177 @@ use crate::{
     Result,
 };
 
-#[derive(Clone, Debug, PartialEq)]
-enum CalcExpr {
-    Binary(BinOp, Box<CalcExpr>, Box<CalcExpr>),
-    Unary(UnaryOp, Box<CalcExpr>),
-    Term(f64),
-}
+#[derive(Parser)]
+#[grammar = "commands/calc.pest"]
+struct Calc;
 
-#[derive(Clone, Debug, PartialEq, Fail)]
-enum CalcParseError {
-    #[fail(display = "couldn't consume entire expression. parsed: {:?}, remaining: '{}'.", parsed, remaining)]
-    NotReadToEnd {
-        parsed: Box<CalcExpr>,
-        remaining: String,
-    },
-    #[fail(display = "nom error: {}", _0)]
-    Nom(String),
-}
+impl Calc {
+    fn eval<S: AsRef<str>>(s: S) -> Result<f64> {
+        use pest::{
+            Parser,
+            prec_climber::PrecClimber,
+            iterators::{Pair, Pairs},
+        };
 
-impl CalcExpr {
-    pub fn parse<S: AsRef<str>>(input: S) -> Result<Box<Self>> {
-        parse_expr(CompleteStr(input.as_ref()))
-            .map_err(|e| CalcParseError::Nom(format!("{}", e)))
-            .and_then(|(s, res)| {
-                if s.len() != 0 {
-                    Err(CalcParseError::NotReadToEnd {
-                        parsed: res,
-                        remaining: s.as_ref().to_owned(),
-                    })
-                } else {
-                    Ok(res)
-                }
-            })
-            .map_err(Error::from)
-    }
+        use self::Rule::*;
 
-    pub fn pretty(&self) -> String {
-        format!("```\n{}\n```", self.pretty_helper(0))
-    }
-
-    fn pretty_helper(&self, depth: usize) -> String {
-        match self {
-            CalcExpr::Binary(op, e1, e2) => {
-                let lines = vec! {
-                    format!("{}{:?} ({}) {{", "\t".repeat(depth), op, self.compute()),
-                    e1.pretty_helper(depth + 1),
-                    e2.pretty_helper(depth + 1),
-                    "\t".repeat(depth) + "}",
+        lazy_static! {
+            static ref CLIMBER: PrecClimber<self::Rule> = {
+                use pest::prec_climber::{
+                    Operator,
+                    Assoc::*,
                 };
 
-                lines.into_iter().join("\n")
-            },
-            CalcExpr::Unary(op, e) => {
-                let lines = vec! {
-                    format!("{}{:?} ({}) {{", "\t".repeat(depth), op, self.compute()),
-                    e.pretty_helper(depth + 1),
-                    "\t".repeat(depth) + "}",
-                };
+                PrecClimber::new(vec![
+                    Operator::new(add, Left) | Operator::new(sub, Left) | Operator::new(modulo, Left),
+                    Operator::new(mul, Left) | Operator::new(div, Left),
+                    Operator::new(dice, Left),
+                    Operator::new(pow, Right),
+                ])
+            };
+        }
 
-                lines.into_iter().join("\n")
-            },
-            CalcExpr::Term(val) => {
-                format!("{}{}", "\t".repeat(depth), val)
+        let result = Calc::parse(calc, s.as_ref())?;
+
+        fn eval_single_pair(pair: Pair<self::Rule>) -> f64 {
+            match pair.as_rule() {
+                oct | hex | binary => {
+                    let base = match pair.as_rule() {
+                        hex => 16,
+                        oct => 8,
+                        binary => 2,
+                        _ => unreachable!(),
+                    };
+
+                    u64::from_str_radix(&pair.as_str()[2..], base).unwrap() as f64
+                },
+                float => pair.as_str().parse::<f64>().unwrap(),
+                expr | num => eval_expr(pair.into_inner()),
+                unary_expr => {
+                    let mut p = pair.into_inner();
+
+                    let op = p.next().unwrap();
+                    let arg = eval_expr(p);
+
+                    match op.as_rule() {
+                        log => arg.ln(),
+                        sqrt => arg.sqrt(),
+                        sgn => arg.signum(),
+
+                        sin => arg.sin(),
+                        cos => arg.cos(),
+                        tan => arg.tan(),
+                        asin => arg.asin(),
+                        acos => arg.acos(),
+                        atan => arg.atan(),
+
+                        sinh => arg.sinh(),
+                        cosh => arg.cosh(),
+                        tanh => arg.tanh(),
+                        asinh => arg.asinh(),
+                        acosh => arg.acosh(),
+                        atanh => arg.atanh(),
+
+                        exp => arg.exp(),
+                        abs => arg.abs(),
+                        ceil => arg.ceil(),
+                        floor => arg.floor(),
+                        round => arg.round(),
+                        _ => unreachable!(),
+                    }
+                },
+                binary_expr => {
+                    let mut p = pair.into_inner();
+
+                    let op = p.next().unwrap();
+
+                    let arg1 = eval_single_pair(p.next().unwrap());
+                    let arg2 = eval_single_pair(p.next().unwrap());
+
+                    assert!(p.next().is_none());
+
+                    match op.as_rule() {
+                        min => arg1.min(arg2),
+                        max => arg1.max(arg2),
+                        atan2 => arg1.atan2(arg2),
+                        _ => unreachable!(),
+                    }
+                },
+                suffix_expr => {
+                    let mut p = pair.into_inner();
+
+                    let arg = eval_expr(p.next().unwrap().into_inner());
+                    let op = p.next().unwrap();
+
+                    assert!(p.next().is_none());
+
+                    match op.as_rule() {
+                        factorial => statrs::function::gamma::gamma(arg + 1.),
+                        _ => unreachable!(),
+                    }
+                },
+                _ => unreachable!(),
             }
         }
-    }
 
-    pub fn compute(&self) -> f64 {
-        use self::CalcExpr::*;
-        use self::BinOp::*;
-        use self::UnaryOp::*;
-
-        match self {
-            Binary(bop, e1, e2) => {
-                let r1 = e1.compute();
-                let r2 = e2.compute();
-                match bop {
-                    Add => r1 + r2,
-                    Sub => r1 - r2,
-                    Mul => r1 * r2,
-                    Div => r1 / r2,
-                    Mod => r1 % r2,
-                    Pow => r1.powf(r2),
-                    Min => r1.min(r2),
-                    Max => r1.max(r2),
-                    DiceRoll => {
-                        let dice_count = r1 as usize;
-                        let dice_faces = r2 as usize;
+        fn eval_expr(p: Pairs<self::Rule>) -> f64 {
+            CLIMBER.climb(
+                p,
+                eval_single_pair,
+                |lhs: f64, op, rhs: f64| match op.as_rule() {
+                    add => lhs + rhs,
+                    sub => lhs - rhs,
+                    mul => lhs * rhs,
+                    div => lhs / rhs,
+                    pow => lhs.powf(rhs),
+                    dice => {
+                        let dice_count = lhs as usize;
+                        let dice_faces = rhs as usize;
 
                         let mut rng = thread_rng();
                         (0..dice_count).map(|_| rng.gen_range(1, dice_faces + 1)).sum::<usize>() as f64
-                    }
+                    },
+                    _ => unreachable!(),
                 }
-            },
-            Unary(uop, e) => {
-                let r = e.compute();
-
-                match uop {
-                    Neg => -r,
-                    Log => r.ln(),
-                    Sqrt => r.sqrt(),
-                    Sgn => r.signum(),
-                    Sin => r.sin(),
-                    Cos => r.cos(),
-                    Tan => r.tan(),
-                    Factorial => statrs::function::gamma::gamma(r),
-                    Exp => r.exp(),
-                    Abs => r.abs(),
-                    Ceil => r.ceil(),
-                    Floor => r.floor(),
-                    Round => r.round(),
-                }
-            },
-            Term(v) => *v,
+            )
         }
+
+        Ok(eval_expr(result))
     }
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BinOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Pow,
-    Min,
-    Max,
-    DiceRoll,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum UnaryOp {
-    Log,
-    Sqrt,
-    Sgn,
-    Exp,
-    Sin,
-    Cos,
-    Tan,
-    Factorial,
-    Neg,
-    Ceil,
-    Floor,
-    Abs,
-    Round,
-}
-
-fn parse_expr(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, up_to_add_sub_mod)
-}
-
-fn parse_add_sub_mod(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, do_parse!(
-        tpl: tuple!(up_to_div_mul, ws!(one_of!("+-%")), parse_expr) >>
-        ({
-            let (expr1, op, expr2) = tpl;
-            let op = match op {
-                '+' => BinOp::Add,
-                '-' => BinOp::Sub,
-                '%' => BinOp::Mod,
-                _ => unreachable!(),
-            };
-            Box::new(CalcExpr::Binary(op, expr1, expr2))
-        })
-    ))
-}
-
-fn parse_div_mul(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, do_parse!(
-        tpl: tuple!(up_to_binary_prefix, ws!(one_of!("/*")), parse_expr) >>
-        ({
-            let (expr1, op, expr2) = tpl;
-            let op = match op {
-                '*' => BinOp::Mul,
-                '/' => BinOp::Div,
-                '^' => BinOp::Pow,
-                _ => unreachable!(),
-            };
-            Box::new(CalcExpr::Binary(op, expr1, expr2))
-        })
-    ))
-}
-
-fn parse_binary_prefix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, do_parse!(
-        op: ws!(alt_complete!(
-            tag!("min") => { |_| BinOp::Min } |
-            tag!("max") => { |_| BinOp::Max }
-        )) >>
-        expr1: up_to_unary_prefix >>
-        expr2: up_to_unary_prefix >>
-        (Box::new(CalcExpr::Binary(op, expr1, expr2)))
-    ))
-}
-
-fn parse_unary_prefix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, do_parse!(
-        op: ws!(alt_complete!(
-            tag!("log") => { |_| UnaryOp::Log }
-            | tag!("sqrt") => { |_| UnaryOp::Sqrt }
-            | tag!("sin") => { |_| UnaryOp::Sin }
-            | tag!("cos") => { |_| UnaryOp::Cos }
-            | tag!("tan") => { |_| UnaryOp::Tan }
-            | tag!("sgn") => { |_| UnaryOp::Sgn }
-            | tag!("exp") => { |_| UnaryOp::Exp }
-            | tag!("ceil") => { |_| UnaryOp::Ceil }
-            | tag!("floor") => { |_| UnaryOp::Floor }
-            | tag!("abs") => { |_| UnaryOp::Abs }
-            | tag!("round") => { |_| UnaryOp::Round }
-        )) >>
-        expr: up_to_dice >>
-        (Box::new(CalcExpr::Unary(op, expr)))
-    ))
-}
-
-fn parse_dice(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, do_parse!(
-        tpl: separated_pair!(up_to_pow, ws!(char!('d')), up_to_pow) >>
-        ({
-            let (expr1, expr2) = tpl;
-            Box::new(CalcExpr::Binary(BinOp::DiceRoll, expr1, expr2))
-        })
-    ))
-}
-
-fn parse_pow(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, do_parse!(
-        tpl: separated_pair!(up_to_neg, ws!(char!('^')), up_to_neg) >>
-        ({
-            let (expr1, expr2) = tpl;
-            Box::new(CalcExpr::Binary(BinOp::Pow, expr1, expr2))
-        })
-    ))
-}
-
-fn parse_neg(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, do_parse!(
-        expr: ws!(preceded!(char!('-'), up_to_suffix)) >>
-        (Box::new(CalcExpr::Unary(UnaryOp::Neg, expr)))
-    ))
-}
-
-fn parse_suffix(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, do_parse!(
-        expr: terminated!(parse_term_or_paren, ws!(tag!("!"))) >>
-        (Box::new(CalcExpr::Unary(UnaryOp::Factorial, expr)))
-    ))
-}
-
-fn parse_term_or_paren(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-    ws!(input, alt_complete!(
-        delimited!(char!('('), parse_expr, char!(')')) |
-        do_parse!(
-            dat: double >>
-            (Box::new(CalcExpr::Term(dat)))
-        )
-    ))
-}
-
-macro_rules! up_to {
-    ($up_to_name:ident, $fn_name:ident, $prev:ident) => (
-        fn $up_to_name(input: CompleteStr) -> nom::IResult<CompleteStr, Box<CalcExpr>> {
-            alt_complete!(input, $fn_name | $prev)
-        }
-    )
-}
-
-up_to! { up_to_add_sub_mod, parse_add_sub_mod, up_to_div_mul }
-up_to! { up_to_div_mul, parse_div_mul, up_to_binary_prefix }
-up_to! { up_to_binary_prefix, parse_binary_prefix, up_to_unary_prefix }
-up_to! { up_to_unary_prefix, parse_unary_prefix, up_to_dice }
-up_to! { up_to_dice, parse_dice, up_to_pow }
-up_to! { up_to_pow, parse_pow, up_to_neg }
-up_to! { up_to_neg, parse_neg, up_to_suffix }
-up_to! { up_to_suffix, parse_suffix, parse_term_or_paren }
 
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
-    fn test_parse_usize() {
-        let (s, expr) = parse_expr("123".into()).unwrap();
-        assert_eq!(s.0, "");
-        assert_eq!(expr, box CalcExpr::Term(123.));
+    fn test_calc_basics() {
+        assert_eq!(3., Calc::eval("1 + 2").unwrap());
+        assert_eq!(3.0f64.ln(), Calc::eval("log 3").unwrap());
+        assert!(6. - Calc::eval("3!").unwrap() < 0.0001);
+        assert_eq!(3., Calc::eval("max 3 2").unwrap());
     }
 
     #[test]
-    fn test_parens() {
-        let (s, expr) = parse_expr("(123)".into()).unwrap();
-        assert_eq!(s.0, "");
-        assert_eq!(expr, box CalcExpr::Term(123.));
+    fn test_binary_unary() {
+        assert_eq!(3.0f64.ln(), Calc::eval("max log 3 log 2").unwrap());
     }
 
     #[test]
-    fn test_infix() {
-        let (s, expr) = parse_expr("1 + 2".into()).unwrap();
-        assert_eq!(s.0, "");
-        assert_eq!(expr, box CalcExpr::Binary(BinOp::Add, box CalcExpr::Term(1.), box CalcExpr::Term(2.)))
+    fn test_prefix_suffix() {
+        assert!(6. - Calc::eval("abs 3!").unwrap() < 0.0001);
     }
-
 }
 
 pub fn roll(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
-    match CalcExpr::parse(args.rest()) {
-        Ok(expr) => send(msg.channel_id, &format!("{}", expr.compute()), msg.tts),
-        Err(e) => {
-            let parse_err = e.downcast::<CalcParseError>().unwrap();
-            if let CalcParseError::NotReadToEnd { remaining, .. } = parse_err {
-                error!("parsing '{}': failed to consume '{}'", args.rest(), remaining);
-                send(msg.channel_id, "I COULDN'T READ THAT YOU FUCK", msg.tts)
-            } else {
-                Err(parse_err.into())
-            }
+    match Calc::eval(args.rest()) {
+        Ok(result) => {
+            debug!("got calc result '{}'", result);
+            send(msg.channel_id, &format!("{}", result), msg.tts)
         },
-    }
-}
-
-pub fn debug_expr(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
-    match CalcExpr::parse(args.rest()) {
-        Ok(expr) => send(msg.channel_id, &expr.pretty(), false),
         Err(e) => {
-            let parse_err = e.downcast::<CalcParseError>().unwrap();
-            if let CalcParseError::NotReadToEnd { remaining, parsed } = parse_err {
-                send(msg.channel_id, &format!("parsed this expr: {}\nwith remaining text: '{}'", parsed.pretty(), remaining), false)
-            } else {
-                Err(parse_err.into())
-            }
-        }
+            error!("error encountered reading calc '{}': {}", args.rest(), e);
+            send(msg.channel_id, "I COULDN'T READ THAT YOU FUCK", msg.tts)
+        },
     }
 }
