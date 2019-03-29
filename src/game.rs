@@ -394,20 +394,6 @@ fn load_spreadsheet() -> Result<Vec<Vec<String>>> {
     Ok(resp.value_ranges.into_iter().next().unwrap().values)
 }
 
-fn to_spreadsheet_alpha(mut x: usize) -> String {
-    let mut result = String::new();
-
-    result.push(ALPHABET[x % 26]);
-    x /= 26;
-
-    while x != 0 {
-        result.push(ALPHABET[x % 26]);
-        x /= 26;
-    }
-
-    result.chars().rev().collect()
-}
-
 fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     use regex::Regex;
 
