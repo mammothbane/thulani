@@ -34,6 +34,8 @@ lazy_static! {
     };
 }
 
+static CLEAN_DATE_FORMAT: &'static str = "%b %-e %Y";
+
 pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let conn = connection()?;
 
@@ -59,7 +61,7 @@ pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
 
             send(msg.channel_id,
                  &format!("that was \"{}\" by {} ({})",
-                          meme.title, author.mention(), metadata.created.date()), msg.tts)?
+                          meme.title, author.mention(), metadata.created.date().format(CLEAN_DATE_FORMAT)), msg.tts)?
         },
         Err(e) => {
             if let Some(NotFound) = e.downcast_ref::<DieselError>() {
@@ -120,7 +122,7 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
                 .map(|(metadata, meme)| {
                     let author_name = crate::TARGET_GUILD_ID.member(metadata.created_by as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
                     let invoker_name = crate::TARGET_GUILD_ID.member(rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
-                    format!("{}. [{}{}] \"{}\" by {} ({}). invoked by {}.", i + 1, rand, ago, meme.title, author_name, metadata.created.date(), invoker_name)
+                    format!("{}. [{}{}] \"{}\" by {} ({}). invoked by {}.", i + 1, rand, ago, meme.title, author_name, metadata.created.date().format(CLEAN_DATE_FORMAT), invoker_name)
                 })
                 .unwrap_or_else(|e| {
                     if let Some(variant) = e.downcast_ref::<DieselError>() {
@@ -160,37 +162,37 @@ pub fn stats(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
 
     let s = format!(
         r#"
-{} memes total
-{} memes with audio ({:0.1}%)
-{} memes with images ({:0.1}%)
+**{}** memes stored
+**{}** memes with audio ({:0.1}%)
+**{}** memes with images ({:0.1}%)
 
-started recording meme invocations on {} ({})
-{} total meme invocations recorded
-{} of which were random ({:0.1}%)
-and {} were audio ({:0.1}%)
+started recording meme invocations on *{}* ({})
+**{}** total meme invocations recorded
+**{}** of which were random ({:0.1}%)
+and **{}** were audio ({:0.1}%)
 
-the most active day was {} with {} memes
-and the loudest day was {} with {} audio memes
+the most active day was *{}* with **{}** memes
+and the loudest day was *{}* with **{}** audio memes
 
-{} has invoked the most random memes ({})
-{} has invoked the most memes by name ({})
+**{}** has invoked the most random memes ({})
+**{}** has invoked the most memes by name ({})
 
-{} was the meme most requested by name ({})
-and {} was the most-memed overall ({})"#,
+*{}* was the meme specifically requested the most ({})
+and *{}* was the most-memed overall ({})"#,
         stats.memes_overall,
         stats.audio_memes,
         (stats.audio_memes as f64) / (stats.memes_overall as f64) * 100.,
         stats.image_memes,
         (stats.image_memes as f64) / (stats.memes_overall as f64) * 100.,
-        stats.started_recording.date(),
+        stats.started_recording.date().format(CLEAN_DATE_FORMAT),
         TIME_FORMATTER.convert((chrono::Utc::now() - stats.started_recording).to_std().unwrap()),
         stats.total_meme_invocations,
         stats.random_meme_invocations,
         (stats.random_meme_invocations as f64) / (stats.total_meme_invocations as f64) * 100.,
         stats.audio_meme_invocations,
         (stats.audio_meme_invocations as f64) / (stats.total_meme_invocations as f64) * 100.,
-        stats.most_active_day, stats.most_active_day_count,
-        stats.most_audio_active_day, stats.most_audio_active_count,
+        stats.most_active_day.format(CLEAN_DATE_FORMAT), stats.most_active_day_count,
+        stats.most_audio_active_day.format(CLEAN_DATE_FORMAT), stats.most_audio_active_count,
         rand_user, stats.most_random_meme_user_count,
         direct_user, stats.most_directly_named_meme_count,
         stats.most_popular_named_meme, stats.most_popular_named_meme_count,
