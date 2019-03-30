@@ -124,13 +124,13 @@ pub fn rare_meme(conn: &PgConnection, audio: bool) -> Result<Meme> {
     let raw_conn = raw_connection()?;
 
     let rows = raw_conn.query(r#"
-    SELECT agg.meme_id, (agg.time_diff / agg.ct) AS play_prop, agg.ct FROM (
-        SELECT meme_count.meme_id AS meme_id, meme_count.ct AS ct, EXTRACT(EPOCH FROM (now() - metadata.created)) AS time_diff FROM (
-          SELECT meme_id, COUNT(*) AS ct FROM invocation_records GROUP BY meme_id
-        ) AS meme_count
-          INNER JOIN memes ON memes.id = meme_count.meme_id
-          INNER JOIN metadata ON metadata.id = memes.metadata_id
-        WHERE ((memes.audio_id IS NOT NULL) = $1) OR $2
+    SELECT agg.meme_id, (agg.time_diff / (agg.ct + 1)) AS play_prop, agg.ct FROM (
+       SELECT memes.id AS meme_id, COALESCE(meme_count.ct, 0) AS ct, EXTRACT(EPOCH FROM (now() - metadata.created)) AS time_diff FROM (
+           SELECT meme_id, COUNT(*) AS ct FROM invocation_records GROUP BY meme_id
+       ) AS meme_count
+       RIGHT JOIN memes ON memes.id = meme_count.meme_id
+       INNER JOIN metadata ON metadata.id = memes.metadata_id
+       WHERE (memes.audio_id IS NOT NULL) = ($1) OR ($2 IS TRUE)
     ) AS agg
     ORDER BY play_prop DESC
     LIMIT 100;
