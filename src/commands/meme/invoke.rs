@@ -1,4 +1,7 @@
-use diesel::result::Error as DieselError;
+use diesel::{
+    NotFound,
+    result::Error as DieselError,
+};
 use failure::Error;
 use serenity::{
     framework::standard::Args,
@@ -13,12 +16,10 @@ use crate::{
         send,
     },
     db::{
+        self,
         connection,
         find_meme,
         InvocationRecord,
-        rand_audio_meme as db_rand_audio_meme,
-        rand_meme as db_rand_meme,
-        rand_silent_meme as db_rand_silent_meme,
     },
     Result,
 };
@@ -79,9 +80,9 @@ fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) ->
     let should_audio = ctx.users_listening()?;
 
     let mem = match audio_playback {
-        AudioPlayback::Required => db_rand_audio_meme(&conn),
-        AudioPlayback::Optional => db_rand_meme(&conn, should_audio),
-        AudioPlayback::Prohibited => db_rand_silent_meme(&conn),
+        AudioPlayback::Required => db::rand_audio_meme(&conn),
+        AudioPlayback::Optional => db::rand_meme(&conn, should_audio),
+        AudioPlayback::Prohibited => db::rand_silent_meme(&conn),
     };
 
     match mem {
@@ -100,6 +101,33 @@ fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) ->
 
             send(message.channel_id, "HELP", message.tts)?;
             return Err(e);
+        },
+    }
+}
+
+pub fn rare_meme(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
+    let should_audio = ctx.users_listening()?;
+
+    let conn = connection()?;
+    let meme = db::rare_meme(&conn, should_audio);
+
+    match meme {
+        Ok(meme) => {
+            InvocationRecord::create(&conn, msg.author.id.0, msg.id.0, meme.id, true)?;
+            send_meme(ctx, &meme, &conn, msg)
+        },
+        Err(e) => {
+            match e.downcast_ref::<DieselError>() {
+                Some(NotFound) => {
+                    info!("rare meme not found");
+                    return send(msg.channel_id, "i don't know any :(", msg.tts)
+                },
+                _ => {},
+            }
+
+            send(msg.channel_id, "THE MEME MARKET IS IN FREEFALL", msg.tts)?;
+
+            Err(e)
         },
     }
 }

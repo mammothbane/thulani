@@ -128,6 +128,12 @@ fn register_db(f: StandardFramework) -> StandardFramework {
             .desc("history of recent messages")
             .cmd(history)
         )
+        .command("rarememe", |c| c
+            .known_as("rare_meme")
+            .guild_only(true)
+            .desc("deliver an underutilized meme")
+            .cmd(rare_meme)
+        )
 }
 
 #[cfg(not(feature = "diesel"))]

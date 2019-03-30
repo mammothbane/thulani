@@ -1,46 +1,18 @@
-use std::{
-    io::Read,
-    process::{
-        Command,
-        Stdio,
-    },
-};
-
-use diesel::{
-    NotFound,
-    PgConnection,
-    result::Error as DieselError,
-};
-use failure::Error;
+use diesel::PgConnection;
 use rand::{Rng, thread_rng};
 use serenity::{
     builder::CreateMessage,
-    framework::standard::Args,
     http::AttachmentType,
     model::channel::Message,
     prelude::*,
 };
-use url::Url;
 
 use crate::{
     audio::{
-        CtxExt,
-        parse_times,
         PlayArgs,
         PlayQueue,
-        ytdl_url,
     },
-    commands::send,
-    db::{
-        Audio,
-        connection,
-        delete_meme,
-        find_meme,
-        Image,
-        InvocationRecord,
-        Meme,
-        NewMeme,
-    },
+    db::Meme,
     Result,
 };
 
