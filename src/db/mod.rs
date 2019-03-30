@@ -124,45 +124,47 @@ pub fn rare_meme(conn: &PgConnection, audio: bool) -> Result<Meme> {
     let raw_conn = raw_connection()?;
 
     let rows = raw_conn.query(r#"
-    SELECT agg.meme_id, (agg.time_diff / (agg.ct + 1)) AS play_prop, agg.ct FROM (
-       SELECT memes.id AS meme_id, COALESCE(meme_count.ct, 0) AS ct, EXTRACT(EPOCH FROM (now() - metadata.created)) AS time_diff FROM (
-           SELECT meme_id, COUNT(*) AS ct FROM invocation_records GROUP BY meme_id
-       ) AS meme_count
-       RIGHT JOIN memes ON memes.id = meme_count.meme_id
-       INNER JOIN metadata ON metadata.id = memes.metadata_id
-       WHERE (memes.audio_id IS NOT NULL) = ($1) OR ($2 IS TRUE)
-    ) AS agg
-    ORDER BY play_prop DESC
+    WITH
+    meme_count AS (
+        SELECT meme_id, COUNT(*) AS ct FROM invocation_records GROUP BY meme_id
+    ),
+    aggregate AS (
+        SELECT memes.id AS meme_id, COALESCE(meme_count.ct, 0) AS ct, EXTRACT(EPOCH FROM (now() - metadata.created)) AS time_diff
+        FROM meme_count
+                 RIGHT JOIN memes ON memes.id = meme_count.meme_id
+                 INNER JOIN metadata ON metadata.id = memes.metadata_id
+        WHERE (memes.audio_id IS NULL) = $1 OR $2
+    ),
+    least_used AS (
+        SELECT meme_id, TRUNC(time_diff / (ct + 1)) as play_prop
+        FROM aggregate
+    )
+    SELECT meme_id, sum(play_prop) OVER (ORDER BY play_prop DESC) as play_prop
+    FROM least_used
     LIMIT 100;
-    "#, &[&audio, &!audio])?;
+    "#, &[&!audio, &audio])?;
 
     let elems = rows.iter()
-        .map(|row| (row.get::<_, i32>(0), row.get::<_, f64>(1), row.get::<_, i64>(2) as usize))
+        .map(|row| (row.get::<_, i32>(0), row.get::<_, f64>(1) as i64))
         .collect::<Vec<_>>();
 
     if elems.len() == 0 {
         return Err(err_msg("no rare memes found"));
     }
 
-    let total_probability_mass: f64 = elems.iter().map(|(_, prob, _)| prob).sum();
+    let total_probability_mass: i64 = elems.iter().map(|(_, prob)| prob).sum();
 
-    if total_probability_mass == 0. {
+    if total_probability_mass == 0 {
         return Err(err_msg("rare meme probability mass was 0"))
     }
 
     let mut rng = thread_rng();
-    let target_prob = rng.gen_range(0., total_probability_mass);
+    let target_prob = rng.gen_range(0, elems.last().unwrap().1);
 
-    let mut cur_prob_acc = 0.;
-    let mut meme_id = elems.last().unwrap().0;
-
-    for &(m_id, prob, _) in elems.iter() {
-        cur_prob_acc += prob;
-        if cur_prob_acc > target_prob {
-            meme_id = m_id;
-            break;
-        }
-    }
+    let meme_id = elems.into_iter()
+        .find(|(_, x)| target_prob < *x)
+        .ok_or(err_msg("couldn't locate meme satisfying target probability"))?
+        .0;
 
     Meme::find(conn, meme_id)
 }
