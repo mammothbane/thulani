@@ -126,20 +126,31 @@ pub fn rare_meme(conn: &PgConnection, audio: bool) -> Result<Meme> {
     let rows = raw_conn.query(r#"
     WITH
     meme_count AS (
-        SELECT meme_id, COUNT(*) AS ct FROM invocation_records GROUP BY meme_id
+        SELECT
+               meme_id,
+               COUNT(*) AS ct
+        FROM invocation_records
+        GROUP BY meme_id
     ),
     aggregate AS (
-        SELECT memes.id AS meme_id, COALESCE(meme_count.ct, 0) AS ct, EXTRACT(EPOCH FROM (now() - metadata.created)) AS time_diff
+        SELECT
+               memes.id AS meme_id,
+               COALESCE(meme_count.ct, 0) AS ct,
+               EXTRACT(EPOCH FROM (now() - metadata.created)) AS time_diff
         FROM meme_count
-                 RIGHT JOIN memes ON memes.id = meme_count.meme_id
-                 INNER JOIN metadata ON metadata.id = memes.metadata_id
+            RIGHT JOIN memes ON memes.id = meme_count.meme_id
+            INNER JOIN metadata ON metadata.id = memes.metadata_id
         WHERE (memes.audio_id IS NULL) = $1 OR $2
     ),
     least_used AS (
-        SELECT meme_id, TRUNC(time_diff / (ct + 1)) as play_prop
+        SELECT
+               meme_id,
+               TRUNC(time_diff / (ct + 1)) as play_prop
         FROM aggregate
     )
-    SELECT meme_id, sum(play_prop) OVER (ORDER BY play_prop DESC) as play_prop
+    SELECT
+           meme_id,
+           sum(play_prop) OVER (ORDER BY play_prop DESC) as play_prop
     FROM least_used
     LIMIT 100;
     "#, &[&!audio, &audio])?;
@@ -150,12 +161,6 @@ pub fn rare_meme(conn: &PgConnection, audio: bool) -> Result<Meme> {
 
     if elems.len() == 0 {
         return Err(err_msg("no rare memes found"));
-    }
-
-    let total_probability_mass: i64 = elems.iter().map(|(_, prob)| prob).sum();
-
-    if total_probability_mass == 0 {
-        return Err(err_msg("rare meme probability mass was 0"))
     }
 
     let mut rng = thread_rng();
