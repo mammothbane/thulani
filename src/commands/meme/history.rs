@@ -202,3 +202,36 @@ and *{}* was the most-memed overall ({})"#,
     );
     send(msg.channel_id, s, msg.tts)
 }
+
+pub fn memers(_: &mut Context, msg: &Message, _args: Args) -> Result<()> {
+    use db;
+    use itertools::Itertools;
+    use serenity::model::{
+        id::UserId,
+    };
+    use crate::TARGET_GUILD_ID;
+
+    let s = db::memers()?
+        .into_iter()
+        .map(|info| {
+            let user = UserId(info.user_id).to_user()?;
+            let username = user.nick_in(*TARGET_GUILD_ID).unwrap_or(user.name);
+
+            let res = format!(
+                "**{}**: {} total, {} random, {} specific. favorite meme: *{}* ({})",
+                username,
+                info.random_memes + info.specific_memes,
+                info.random_memes,
+                info.specific_memes,
+                info.most_used_meme,
+                info.most_used_meme_count,
+            );
+
+            Ok(res)
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .join("\n");
+
+    send(msg.channel_id, &s, msg.tts)
+}

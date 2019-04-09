@@ -463,3 +463,74 @@ pub fn stats(conn: &PgConnection) -> Result<Stats> {
         most_popular_meme_overall_count: most_invoked_meme_count as usize,
     })
 }
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Default)]
+pub struct MemerInfo {
+    pub user_id: u64,
+    pub random_memes: usize,
+    pub specific_memes: usize,
+    pub most_used_meme: String,
+    pub most_used_meme_count: usize,
+}
+
+pub fn memers() -> Result<Vec<MemerInfo>> {
+    let raw_conn = raw_connection()?;
+
+    let rows = raw_conn.query(r#"
+    WITH random_count AS (
+        SELECT user_id, COUNT(*) as count
+        FROM invocation_records
+        WHERE random = TRUE
+        GROUP BY user_id
+    ),
+         specific_count AS (
+             SELECT user_id, COUNT(*) as count
+             FROM invocation_records
+             WHERE random = FALSE
+             GROUP BY user_id
+         ),
+         user_meme_counts AS (
+             SELECT user_id, meme_id, COUNT(meme_id) as meme_count
+             FROM invocation_records
+             WHERE EXISTS (SELECT id FROM memes WHERE id = invocation_records.meme_id)
+             GROUP BY user_id, meme_id
+             ORDER BY user_id, meme_count DESC
+         ),
+         most_memed_per_user AS (
+             SELECT user_id, MAX(meme_count) as max_count
+             FROM user_meme_counts
+             GROUP BY user_id
+         ),
+         most_memed AS (
+             SELECT DISTINCT ON (user_meme_counts.user_id) user_meme_counts.user_id, user_meme_counts.meme_id, user_meme_counts.meme_count
+             FROM user_meme_counts
+             INNER JOIN most_memed_per_user ON user_meme_counts.user_id = most_memed_per_user.user_id
+             WHERE user_meme_counts.meme_count = most_memed_per_user.max_count
+         )
+    SELECT random_count.user_id, random_count.count, specific_count.count, memes.title, most_memed.meme_count
+    FROM random_count
+    INNER JOIN most_memed ON most_memed.user_id = random_count.user_id
+    INNER JOIN specific_count ON specific_count.user_id = random_count.user_id
+    INNER JOIN memes ON memes.id = most_memed.meme_id
+    ORDER BY (random_count.count + specific_count.count) DESC
+    "#, &[])?;
+
+    let result = rows.iter().map(|row| {
+        let user_id: i64 = row.get(0);
+        let random_count: i64 = row.get(1);
+        let specific_count: i64 = row.get(2);
+        let most_memed_meme: String = row.get(3);
+        let most_memed_count: i64 = row.get(4);
+
+        MemerInfo {
+            user_id: user_id as u64,
+            random_memes: random_count as usize,
+            specific_memes: specific_count as usize,
+            most_used_meme: most_memed_meme,
+            most_used_meme_count: most_memed_count as usize,
+        }
+    })
+        .collect();
+
+    Ok(result)
+}

@@ -134,6 +134,11 @@ fn register_db(f: StandardFramework) -> StandardFramework {
             .desc("deliver an underutilized meme")
             .cmd(rare_meme)
         )
+        .command("memers", |c| c
+            .guild_only(true)
+            .desc("list stats for all server memers")
+            .cmd(memers)
+        )
 }
 
 #[cfg(not(feature = "diesel"))]
