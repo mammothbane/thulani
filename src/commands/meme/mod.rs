@@ -29,18 +29,20 @@ mod invoke;
 mod delete;
 
 fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Result<()> {
-    debug!("sending meme: {:?}", t);
+    let should_tts = t.content.as_ref().map(|t| t.len() > 0).unwrap_or(false) &&
+        thread_rng().gen::<u32>() % 25 == 0;
+
+    debug!("sending meme (tts: {}): {:?}", should_tts, t);
 
     let image = t.image(conn);
     let audio = t.audio(conn);
 
     let create_msg = |m: CreateMessage| {
-        let ret = m
-            .tts(thread_rng().gen::<u32>() % 25 == 0);
+        let ret = m.tts(should_tts);
 
         match t.content {
-            Some(ref text) => ret.content(text),
-            None => ret,
+            Some(ref text) if text.len() > 0 => ret.content(text),
+            _ => ret,
         }
     };
 
