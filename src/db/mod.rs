@@ -272,6 +272,9 @@ pub struct Stats {
     pub most_popular_named_meme: String,
     pub most_popular_named_meme_count: usize,
 
+    pub most_popular_random_meme: String,
+    pub most_popular_random_meme_count: usize,
+
     pub most_popular_meme_overall: String,
     pub most_popular_meme_overall_count: usize,
 }
@@ -407,6 +410,20 @@ pub fn stats(conn: &PgConnection) -> Result<Stats> {
     let rows = raw_conn.query(r#"
     SELECT memes.title, COUNT(*) FROM invocation_records
     INNER JOIN memes ON meme_id = memes.id
+    WHERE random IS TRUE
+    GROUP BY memes.title
+    ORDER BY COUNT(*) DESC
+    LIMIT 1;
+    "#, &[])?;
+
+    let row = rows.get(0);
+
+    let most_random_meme = row.get(0);
+    let most_random_meme_count: i64 = row.get(1);
+
+    let rows = raw_conn.query(r#"
+    SELECT memes.title, COUNT(*) FROM invocation_records
+    INNER JOIN memes ON meme_id = memes.id
     GROUP BY memes.title
     ORDER BY COUNT(*) DESC
     LIMIT 1;
@@ -438,6 +455,9 @@ pub fn stats(conn: &PgConnection) -> Result<Stats> {
 
         most_popular_named_meme: most_requested_meme,
         most_popular_named_meme_count: most_requested_meme_count as usize,
+
+        most_popular_random_meme: most_random_meme,
+        most_popular_random_meme_count: most_random_meme_count as usize,
 
         most_popular_meme_overall: most_invoked_meme,
         most_popular_meme_overall_count: most_invoked_meme_count as usize,

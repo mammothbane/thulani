@@ -178,6 +178,7 @@ and the loudest day was *{}* with **{}** audio memes
 **{}** has invoked the most memes by name ({})
 
 *{}* was the meme specifically requested the most ({})
+*{}* was the meme randomly invoked the most ({})
 and *{}* was the most-memed overall ({})"#,
         stats.memes_overall,
         stats.audio_memes,
@@ -196,6 +197,7 @@ and *{}* was the most-memed overall ({})"#,
         rand_user, stats.most_random_meme_user_count,
         direct_user, stats.most_directly_named_meme_count,
         stats.most_popular_named_meme, stats.most_popular_named_meme_count,
+        stats.most_popular_random_meme, stats.most_popular_random_meme_count,
         stats.most_popular_meme_overall, stats.most_popular_meme_overall_count,
     );
     send(msg.channel_id, s, msg.tts)
