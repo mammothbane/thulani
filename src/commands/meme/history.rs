@@ -235,3 +235,85 @@ pub fn memers(_: &mut Context, msg: &Message, _args: Args) -> Result<()> {
 
     send(msg.channel_id, &s, msg.tts)
 }
+
+pub fn query(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+    use std::borrow::Borrow;
+
+    use itertools::Itertools;
+    use regex::Regex;
+    use failure::err_msg;
+    use serenity::model::id::UserId;
+
+    use crate::{
+        game::get_user_id,
+        db,
+        TARGET_GUILD_ID,
+    };
+
+    lazy_static! {
+        static ref CREATOR_REGEX: Regex = Regex::new(r"(?i)(?:by|creator)=(.*)").unwrap();
+        static ref AGE_REGEX: Regex = Regex::new(r"(?i)(?:age|order)=(.*)").unwrap();
+    }
+
+    let guild = msg.channel_id.to_channel()?
+        .guild()
+        .ok_or(err_msg("couldn't find guild"))?;
+
+    let guild = guild.read()
+        .guild()
+        .ok_or(err_msg("couldn't find guild"))?;
+
+    let guild = guild
+        .read();
+
+    let creator: Option<u64> = {
+        let creator = args.current_quoted().map(|s| CREATOR_REGEX.is_match(s)).unwrap_or(false);
+        if creator {
+            args.single_quoted::<String>()
+                .ok()
+                .and_then(|s| CREATOR_REGEX.captures(&s).and_then(|c| c.get(1)).map(|x| x.as_str().to_owned()))
+                .and_then(|s| get_user_id(guild.borrow(), s).ok().map(|s| s.0))
+        } else {
+            None
+        }
+    };
+
+    let order = {
+        let order = args.current_quoted().map(|s| AGE_REGEX.is_match(s)).unwrap_or(false);
+
+        if order {
+            args.single_quoted::<String>().ok()
+                .and_then(|s| AGE_REGEX.captures(&s).and_then(|c| c.get(1)).map(|x| x.as_str().to_owned()))
+                .map(|s| s.contains("new"))
+                .unwrap_or(true)
+        } else {
+            true
+        }
+    };
+
+    let result = db::query_meme(args.rest(), creator, order)?
+        .into_iter()
+        .map(|(meme, metadata)| {
+            let user = UserId(metadata.created_by as u64).to_user()?;
+            let username = user.nick_in(*TARGET_GUILD_ID).unwrap_or(user.name);
+
+            Ok(format!("*{}* by **{}** ({}). text length: **{}**, image: **{}**, audio: **{}**",
+                       meme.title,
+                       username,
+                       metadata.created.date().format(CLEAN_DATE_FORMAT),
+                       meme.content.map_or(0, |s| s.len()),
+                       meme.image_id.map_or("NO", |_s| "YES"),
+                       meme.audio_id.map_or("NO", |_s| "YES"),
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .join("\n");
+
+    if result.len() == 0 {
+        info!("no memes matched query");
+        return send(msg.channel_id, "no match".to_owned(), msg.tts);
+    }
+
+    send(msg.channel_id, &result, msg.tts)
+}

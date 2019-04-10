@@ -139,6 +139,11 @@ fn register_db(f: StandardFramework) -> StandardFramework {
             .desc("list stats for all server memers")
             .cmd(memers)
         )
+        .command("query", |c| c
+            .guild_only(true)
+            .desc("find a lot of matching memes")
+            .cmd(query)
+        )
 }
 
 #[cfg(not(feature = "diesel"))]

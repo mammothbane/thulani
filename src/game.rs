@@ -153,7 +153,7 @@ fn ownedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
 }
 
 #[derive(Copy, Clone, Debug, Fail, PartialEq, Eq, Hash)]
-enum UserLookupError {
+pub enum UserLookupError {
     #[fail(display = "too many possible options ({}) for query", _0)]
     Ambiguous(usize),
 
@@ -161,7 +161,7 @@ enum UserLookupError {
     NotFound,
 }
 
-fn get_user_id<S: AsRef<str>>(g: &Guild, s: S) -> StdResult<UserId, UserLookupError> {
+pub fn get_user_id<S: AsRef<str>>(g: &Guild, s: S) -> StdResult<UserId, UserLookupError> {
     let s = s.as_ref().trim_start_matches("@").to_lowercase();
 
     if let Some(info) = USER_INFO_MAP.get(&s) {

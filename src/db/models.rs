@@ -7,7 +7,7 @@ use crate::{
     Result,
 };
 
-#[derive(Queryable, Identifiable, PartialEq, Debug)]
+#[derive(Queryable, Identifiable, PartialEq, Debug, Clone)]
 #[table_name="memes"]
 pub struct Meme {
     pub id: i32,
@@ -32,7 +32,7 @@ impl Meme {
     }
 }
 
-#[derive(Insertable, PartialEq, Debug)]
+#[derive(Insertable, PartialEq, Debug, Clone)]
 #[table_name="memes"]
 pub struct NewMeme {
     pub title: String,
@@ -157,7 +157,7 @@ pub struct NewImage {
 }
 
 
-#[derive(Queryable, Identifiable, PartialEq, Debug)]
+#[derive(Queryable, Identifiable, PartialEq, Debug, Clone)]
 #[table_name="metadata"]
 pub struct Metadata {
     pub id: i32,

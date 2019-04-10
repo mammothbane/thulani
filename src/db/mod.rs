@@ -67,6 +67,51 @@ pub fn find_meme<T: AsRef<str>>(conn: &PgConnection, search: T) -> Result<Meme> 
         .map_err(Error::from)
 }
 
+pub fn query_meme<T: AsRef<str>>(search: T, user_id: Option<u64>, age_desc: bool) -> Result<Vec<(Meme, Metadata)>> {
+    let raw_conn = raw_connection()?;
+
+    let search = format!("%{}%", search.as_ref());
+
+    let rows = raw_conn.query(&format!(r#"
+    SELECT memes.id, title, content, image_id, audio_id, metadata_id, created, created_by
+    FROM memes
+    INNER JOIN metadata ON memes.metadata_id = metadata.id
+    WHERE (memes.title ILIKE $1 OR memes.content ILIKE $1)
+              AND (metadata.created_by = $2 OR $3)
+    ORDER BY metadata.created {}
+    LIMIT 100
+    "#,
+        if age_desc { "DESC" } else { "ASC" },
+    ), &[
+        &search,
+        &(user_id.unwrap_or(0) as i64),
+        &user_id.is_none(),
+    ])?;
+
+    let result = rows.iter()
+        .map(|row| {
+            let meme = Meme {
+                id: row.get(0),
+                title: row.get(1),
+                content: row.get(2),
+                image_id: row.get(3),
+                audio_id: row.get(4),
+                metadata_id: row.get(5),
+            };
+
+            let metadata = Metadata {
+                id: row.get(5),
+                created: row.get(6),
+                created_by: row.get(7),
+            };
+
+            (meme, metadata)
+        })
+        .collect();
+
+    Ok(result)
+}
+
 pub fn delete_meme<T: AsRef<str>>(conn: &PgConnection, search: T, deleted_by: u64) -> Result<()> {
     conn.transaction::<(), Error, _>(|| {
         let deleted = memes::table
