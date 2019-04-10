@@ -308,6 +308,15 @@ pub fn query(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()?
         .into_iter()
+        .scan(0, |state, line| {
+            *state = *state + line.len() + 1;
+
+            if *state < 2000 {
+                Some(line)
+            } else {
+                None
+            }
+        })
         .join("\n");
 
     if result.len() == 0 {
