@@ -2,32 +2,28 @@ version: '3'
 services:
   thulani:
     image: thulani
-    build: .
+    build: 
+        context: .
+        dockerfile: docker/thulani.docker
+    env_file:
+        - .env
+        - docker/db.env
+    environment:
+        DATABASE_URL: "postgres://thulani:${THULANI_PGPASS}@db/memes"
+    restart: always
     depends_on:
       - db
-      - migrate
-
-    environment:
-      DATABASE_URL: "postgres://thulani:clickheretodie@db/memes"
-      RUST_BACKTRACE: 1
 
   db:
-    image: postgres:latest
+    image: thulani-db
+    build:
+        context: .
+        dockerfile: docker/db.docker
     restart: always
     volumes:
-      - db-data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: thulani
-      POSTGRES_PASSWORD: clickheretodie
-      POSTGRES_DB: memes
-
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile-migrate
-    restart: on-failure
-    depends_on:
-      - db
+        - db-data:/var/lib/postgresql/data
+    env_file:
+        - docker/db.env
 
 volumes:
   db-data:

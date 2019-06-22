@@ -1,0 +1,15 @@
+FROM rust:latest
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN apt-get update -yqq && apt-get install -yqq libpq-dev && rm -rf /var/lib/apt/lists/*
+RUN cargo install diesel_cli --no-default-features --features postgres
+
+FROM postgres:11.0
+
+COPY --from=0 /usr/local/cargo/bin/diesel /usr/local/bin/diesel
+RUN apt-get update && apt install libpq5
+
+RUN mkdir -p /docker-entrypoint-initdb.d
+COPY migrations ./migrations
+COPY docker/setup_db.sh /docker-entrypoint-initdb.d

@@ -1,16 +1,17 @@
 FROM rustlang/rust:nightly
 
-RUN apt-get update -yqq && apt-get install -yqq libsodium-dev
+RUN apt-get update -yqq && apt-get install -yqq libsodium-dev libclang1
 
 WORKDIR /usr/src/thulani
-COPY src ./src
 COPY Cargo.toml ./
-
+# COPY Cargo.lock ./
+COPY src ./src
 RUN cargo fetch
 
+COPY src ./src
 COPY .env ./
 
-RUN cargo build --release
+RUN export SODIUM_LIB_DIR=/usr/lib/x86_64-linux-gnu/ && export SODIUM_SHARED=1 && cargo build --release
 
 FROM python:3
 RUN pip install youtube-dl
