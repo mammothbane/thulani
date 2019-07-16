@@ -109,8 +109,6 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         .enumerate()
         .rev()
         .map(|(i, rec)| {
-            use chrono;
-
             let dt = chrono::DateTime::from_utc(rec.time, chrono::Utc{});
             let ago = TIME_FORMATTER.convert((chrono::Utc::now() - dt).to_std().unwrap());
 
@@ -142,7 +140,6 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
 pub fn stats(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
     use db;
-    use chrono;
     use serenity::model::{
         id::UserId,
         user::User,

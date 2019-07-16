@@ -153,17 +153,17 @@ impl PlayQueue {
                     .stdin(process::Stdio::null())
                     .spawn()?;
 
-                let mut audio_reader = ffmpeg_command.stdout.unwrap();
+                let audio_reader = ffmpeg_command.stdout.unwrap();
 
-                let mut pre_silence = vec![0u8; PRE_SILENCE_BYTES];
-                let mut post_silence = vec![0u8; POST_SILENCE_BYTES];
+                let pre_silence = vec![0u8; PRE_SILENCE_BYTES];
+                let post_silence = vec![0u8; POST_SILENCE_BYTES];
 
                 let reader = Cursor::new(pre_silence).chain(audio_reader).chain(Cursor::new(post_silence));
 
                 voice::pcm(true, reader)
             },
             Right(ref vec) => {
-                let mut transcoder = process::Command::new("ffmpeg")
+                let transcoder = process::Command::new("ffmpeg")
                     .args(&[
                         "-format", "opus",
                         "-i", "pipe:0",
@@ -206,8 +206,8 @@ impl PlayQueue {
                     }
                 });
 
-                let mut pre_silence = vec![0u8; PRE_SILENCE_BYTES];
-                let mut post_silence = vec![0u8; POST_SILENCE_BYTES];
+                let pre_silence = vec![0u8; PRE_SILENCE_BYTES];
+                let post_silence = vec![0u8; POST_SILENCE_BYTES];
 
                 let reader = Cursor::new(pre_silence)
                     .chain(stdout.unwrap())

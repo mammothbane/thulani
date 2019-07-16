@@ -36,15 +36,18 @@ extern crate typemap;
 extern crate url;
 
 use std::{
+    default::Default,
+    fs::File,
     thread,
     time::{
         Duration,
-        Instant
+        Instant,
     },
 };
 
 use dotenv::dotenv;
 use failure::Error;
+use fnv::{FnvHashMap, FnvHashSet};
 use serenity::{
     framework::{
         standard::help_commands,
@@ -52,7 +55,7 @@ use serenity::{
     },
     model::{
         gateway::Ready,
-        id::{ChannelId, GuildId, UserId},
+        id::{ChannelId, GuildId, MessageId, UserId},
     },
     prelude::*,
 };
@@ -106,7 +109,25 @@ impl EventHandler for Handler {
             let _ = guild.map(|g| g.id().edit_nickname(Some("thulani")));
         }
     }
+
+    fn message_delete(&self, _ctx: Context, channel_id: ChannelId, deleted_message_id: MessageId) {
+        MESSAGE_WATCH.lock()
+            .remove(&deleted_message_id)
+            .iter()
+            .for_each(|id| {
+                if let Err(e) = channel_id.delete_message(id) {
+                    error!("deleting message: {}", e);
+                }
+            });
+    }
 }
+
+lazy_static! {
+    static ref MESSAGE_WATCH: Mutex<FnvHashMap<MessageId, MessageId>> = Mutex::new(FnvHashMap::default());
+    static ref PREFIXES: Vec<&'static str> = vec!["!thulani ", "!thulan ", "!thulando madando ", "!thulando "];
+    static ref RESTRICTED_PREFIXES: Vec<&'static str> = vec!["!todd ", "!toddbert ", "!toddlani "];
+}
+
 
 fn run() -> Result<()> {
     let token = &dotenv::var("THULANI_TOKEN").map_err(|_| format_err!("missing token"))?;
@@ -115,23 +136,59 @@ fn run() -> Result<()> {
     audio::VoiceManager::register(&mut client);
     audio::PlayQueue::register(&mut client);
 
+    let all_prefixes = {
+        let mut all_prefixes: Vec<&'static str> = vec![];
+        all_prefixes.extend(PREFIXES.iter());
+        all_prefixes.extend(RESTRICTED_PREFIXES.iter());
+        all_prefixes
+    };
+
+    let restrict_ids = File::open("restrict.json")
+        .map_err(Error::from)
+        .and_then(|f| serde_json::from_reader::<_, Vec<u64>>(f).map_err(Error::from));
+
+    if let Err(ref e) = restrict_ids {
+        error!("opening restrict file: {}", e);
+    }
+
+    let restrict_ids = restrict_ids
+        .unwrap_or_default()
+        .into_iter()
+        .collect::<FnvHashSet<_>>();
+
     let owner_id = must_env_lookup::<u64>("OWNER_ID");
     let mut framework = StandardFramework::new()
         .configure(|c| c
             .allow_dm(false)
             .allow_whitespace(true)
-            .prefixes(vec!["!thulani ", "!thulan ", "!thulando madando ", "!thulando "])
+            .prefixes(all_prefixes)
             .ignore_bots(true)
             .on_mention(false)
             .owners(vec![UserId(owner_id)].into_iter().collect())
             .case_insensitivity(true)
             .delimiter("\t")
         )
-        .before(|_ctx, message, cmd| {
-            let result = message.guild_id.map_or(false, |x| x.0 == *TARGET_GUILD);
-            debug!("got command '{}' from user '{}' ({}). accept: {}", cmd, message.author.name, message.author.id, result);
+        .before(move |_ctx, message, cmd| {
+            debug!("got command '{}' from user '{}' ({})", cmd, message.author.name, message.author.id);
+            if !message.guild_id.map_or(false, |x| x.0 == *TARGET_GUILD) {
+                info!("rejecting command '{}' from user '{}': wrong guild", cmd, message.author.name);
+                return false;
+            }
 
-            result          
+            if RESTRICTED_PREFIXES.iter().any(|prefix| message.content.starts_with(prefix))
+                && restrict_ids.contains(&message.author.id.0) {
+                info!("rejecting command '{}' from user '{}': restricted prefix", cmd, message.author.name);
+                match crate::commands::send_result(message.channel_id, "no", message.tts) {
+                    Err(e) => error!("sending restricted prefix response: {}", e),
+                    Ok(msg_id) => {
+                        let mut mp = MESSAGE_WATCH.lock();
+                        mp.insert(message.id, msg_id);
+                    }
+                }
+                return false;
+            }
+
+            true
         })
         .after(|_ctx, msg, cmd, err| {
             match err {

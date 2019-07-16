@@ -1,6 +1,6 @@
 use serenity::{
     framework::StandardFramework,
-    model::id::ChannelId,
+    model::id::{ChannelId, MessageId},
 };
 
 use crate::Result;
@@ -151,7 +151,13 @@ fn register_db(f: StandardFramework) -> StandardFramework {
     f
 }
 
+#[inline]
 pub(crate) fn send<A: AsRef<str>>(channel: ChannelId, text: A, tts: bool) -> Result<()> {
-    channel.send_message(|m| m.content(text.as_ref()).tts(tts))?;
-    Ok(())
+    send_result(channel, text, tts).map(|_| ())
+}
+
+#[inline]
+pub(crate) fn send_result<A: AsRef<str>>(channel: ChannelId, text: A, tts: bool) -> Result<MessageId> {
+    let result = channel.send_message(|m| m.content(text.as_ref()).tts(tts))?;
+    Ok(result.id)
 }

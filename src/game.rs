@@ -204,11 +204,6 @@ pub fn get_user_id<S: AsRef<str>>(g: &Guild, s: S) -> StdResult<UserId, UserLook
 }
 
 fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -> Result<()> {
-    use fnv::{
-        FnvHashMap,
-        FnvHashSet,
-    };
-
     let guild = msg.channel_id.to_channel()?
         .guild()
         .ok_or(err_msg("couldn't find guild"))?;
