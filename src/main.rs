@@ -45,6 +45,7 @@ use std::{
     },
 };
 
+use chrono::Datelike;
 use dotenv::dotenv;
 use failure::Error;
 use fnv::{FnvHashMap, FnvHashSet};
@@ -175,20 +176,41 @@ fn run() -> Result<()> {
                 return false;
             }
 
-            if RESTRICTED_PREFIXES.iter().any(|prefix| message.content.starts_with(prefix))
-                && restrict_ids.contains(&message.author.id.0) {
-                info!("rejecting command '{}' from user '{}': restricted prefix", cmd, message.author.name);
-                match crate::commands::send_result(message.channel_id, "no", message.tts) {
-                    Err(e) => error!("sending restricted prefix response: {}", e),
-                    Ok(msg_id) => {
-                        let mut mp = MESSAGE_WATCH.lock();
-                        mp.insert(message.id, msg_id);
-                    }
-                }
-                return false;
+            if message.author.id.0 == owner_id {
+                return true;
             }
 
-            true
+            let restricted_prefix = RESTRICTED_PREFIXES.iter().any(|prefix| message.content.starts_with(prefix));
+            if !restricted_prefix {
+                return true;
+            }
+
+            const PERMITTED_WEEKDAY: chrono::Weekday = chrono::Weekday::Tue;
+
+            let restricted_user = restrict_ids.contains(&message.author.id.0);
+            let flip_restriction_day = chrono::Local::now().weekday() == PERMITTED_WEEKDAY;
+
+            if restricted_user == flip_restriction_day {
+                return true;
+            }
+
+            let reason = if !flip_restriction_day {
+                "restricted prefix".to_owned()
+            } else {
+                format!("it is {:?}", PERMITTED_WEEKDAY)
+            };
+
+            info!("rejecting command '{}' from user '{}': {}", cmd, message.author.name, reason);
+
+            match crate::commands::send_result(message.channel_id, "no", message.tts) {
+                Err(e) => error!("sending restricted prefix response: {}", e),
+                Ok(msg_id) => {
+                    let mut mp = MESSAGE_WATCH.lock();
+                    mp.insert(message.id, msg_id);
+                }
+            }
+
+            return false;
         })
         .after(|_ctx, msg, cmd, err| {
             match err {
