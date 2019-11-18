@@ -9,6 +9,7 @@ use std::{
 
 use either::{Left, Right};
 use serenity::{
+    CacheAndHttp,
     client::bridge::voice::ClientVoiceManager,
     prelude::*,
     voice,
@@ -22,7 +23,6 @@ use crate::{
         ytdl_url,
     },
     commands::{
-        send,
         sound_levels::DEFAULT_VOLUME,
     },
     must_env_lookup,
@@ -63,23 +63,28 @@ impl PlayQueue {
     pub fn register(c: &mut Client) {
         let voice_manager = Arc::clone(&c.voice_manager);
 
-        let mut data = c.data.lock();
         let queue = Arc::new(RwLock::new(PlayQueue::new()));
 
-        data.insert::<PlayQueue>(Arc::clone(&queue));
+        {
+            let mut data = c.data.write();
+            data.insert::<PlayQueue>(Arc::clone(&queue));
+        }
 
+
+        let cache_http = c.cache_and_http.clone();
         thread::spawn(move || {
             loop {
-                if let Err(e) = Self::update(&queue, &voice_manager) {
+                if let Err(e) = Self::update(cache_http, &queue, &voice_manager) {
                     error!("updating playqueue: {}", e);
                 }
 
                 thread::sleep(Duration::from_millis(250));
             }
         });
+
     }
 
-    fn update(queue_lck: &Arc<RwLock<Self>>, voice_manager: &Arc<Mutex<ClientVoiceManager>>) -> Result<()> {
+    fn update(cache_http: Arc<CacheAndHttp>, queue_lck: &Arc<RwLock<Self>>, voice_manager: &Arc<Mutex<ClientVoiceManager>>) -> Result<()> {
         let (queue_is_empty, queue_has_playing) = {
             let queue = queue_lck.read().unwrap();
 
@@ -236,7 +241,7 @@ impl PlayQueue {
             },
             None => {
                 error!("couldn't join channel");
-                send(item.sender_channel, "something happened somewhere somehow.", false)?;
+                item.sender_channel.say(cache_http.http, "something happened somewhere somehow.")?;
             }
         }
 

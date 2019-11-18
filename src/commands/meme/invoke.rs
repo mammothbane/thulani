@@ -2,7 +2,7 @@ use diesel::{
     NotFound,
     result::Error as DieselError,
 };
-use failure::Error;
+use itertools::Itertools;
 use serenity::{
     framework::standard::Args,
     model::channel::Message,
@@ -10,11 +10,7 @@ use serenity::{
 };
 
 use crate::{
-    audio::CtxExt,
-    commands::{
-        meme::send_meme,
-        send,
-    },
+    commands::meme::send_meme,
     db::{
         self,
         connection,
@@ -22,18 +18,25 @@ use crate::{
         InvocationRecord,
     },
     Result,
+    util::CtxExt,
 };
 
+#[command]
+#[aliases("mem")]
 #[inline]
 pub fn meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     _meme(ctx, msg, args, AudioPlayback::Optional)
 }
 
+#[command]
+#[aliases("audiomeme", "audiomem")]
 #[inline]
 pub fn audio_meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     _meme(ctx, msg, args, AudioPlayback::Required)
 }
 
+#[command]
+#[aliases("silentmeme", "silentmem")]
 #[inline]
 pub fn silent_meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     _meme(ctx, msg, args, AudioPlayback::Prohibited)
@@ -51,7 +54,7 @@ fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_playback: AudioPlay
         return rand_meme(ctx, msg, audio_playback);
     }
 
-    let search = args.full();
+    let search = args.raw().join(" ");
 
     let conn = connection()?;
     let mem = match find_meme(&conn, search) {
@@ -63,9 +66,9 @@ fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_playback: AudioPlay
         Err(e) => {
             return if let Some(NotFound) = e.downcast_ref::<DieselError>() {
                 info!("requested meme not found in database");
-                send(msg.channel_id, "c'mon baby, guesstimate", msg.tts)
+                ctx.send(msg.channel_id, "c'mon baby, guesstimate", msg.tts)
             } else {
-                send(msg.channel_id, "what in ryan's name", msg.tts)?;
+                ctx.send(msg.channel_id, "what in ryan's name", msg.tts)?;
                 Err(e)
             };
         },
@@ -74,6 +77,8 @@ fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_playback: AudioPlay
     send_meme(ctx, &mem, &conn, msg)
 }
 
+#[command]
+#[aliases("rarememe", "raremem")]
 fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) -> Result<()> {
     let conn = connection()?;
 
@@ -94,17 +99,19 @@ fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) ->
             match e.downcast_ref::<DieselError>() {
                 Some(NotFound) => {
                     info!("random meme not found");
-                    return send(message.channel_id, "i don't know any :(", message.tts)
+                    return ctx.send(message.channel_id, "i don't know any :(", message.tts)
                 },
                 _ => {},
             }
 
-            send(message.channel_id, "HELP", message.tts)?;
+            ctx.send(message.channel_id, "HELP", message.tts)?;
             return Err(e);
         },
     }
 }
 
+#[command]
+#[aliases("rarememe", "raremem")]
 pub fn rare_meme(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
     let should_audio = ctx.users_listening()?;
 
@@ -120,12 +127,12 @@ pub fn rare_meme(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
             match e.downcast_ref::<DieselError>() {
                 Some(NotFound) => {
                     info!("rare meme not found");
-                    return send(msg.channel_id, "i don't know any :(", msg.tts)
+                    return ctx.send(msg.channel_id, "i don't know any :(", msg.tts)
                 },
                 _ => {},
             }
 
-            send(msg.channel_id, "THE MEME MARKET IS IN FREEFALL", msg.tts)?;
+            ctx.send(msg.channel_id, "THE MEME MARKET IS IN FREEFALL", msg.tts)?;
 
             Err(e)
         },

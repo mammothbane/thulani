@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     iter,
     result::Result as StdResult,
     str::{
@@ -7,10 +8,7 @@ use std::{
     },
 };
 
-use failure::{
-    err_msg,
-    Error,
-};
+use anyhow::Error;
 use fnv::{
     FnvHashMap,
     FnvHashSet,
@@ -18,8 +16,8 @@ use fnv::{
 use itertools::Itertools;
 use serenity::{
     framework::standard::{
+        ArgError,
         Args,
-        StandardFramework,
     },
     model::{
         channel::Message,
@@ -31,9 +29,9 @@ use serenity::{
 use url::Url;
 
 use crate::{
-    commands::send,
     must_env_lookup,
     Result,
+    util::CtxExt,
     VOICE_CHANNEL_ID,
 };
 
@@ -42,27 +40,6 @@ lazy_static! {
     static ref STEAM_API_KEY: String = must_env_lookup("STEAM_API_KEY");
     static ref SPREADSHEET_ID: String = must_env_lookup("SPREADSHEET_ID");
     static ref MAX_SHEET_COLUMN: String = must_env_lookup("MAX_SHEET_COLUMN");
-}
-
-pub fn register(s: StandardFramework) -> StandardFramework {
-    s
-        .command("game", |c| c
-            .known_as("gaem")
-            .known_as("installedgaem")
-            .known_as("installedgame")
-            .desc("what game should we play?")
-            .exec(installedgame)
-        )
-        .command("ownedgame", |c| c
-            .known_as("ownedgaem")
-            .desc("what games does everyone have?")
-            .exec(ownedgame)
-        )
-        .command("updategame", |c| c
-            .known_as("updategaem")
-            .desc("update your games on the spreadsheet")
-            .exec(updategaem)
-        )
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -139,25 +116,29 @@ impl FromStr for GameStatus {
         } else if s.chars().all(char::is_whitespace) {
             Ok(GameStatus::Unknown)
         } else {
-            Err(err_msg(format!("unexpected status '{}'", s)))
+            Err(anyhow!(format!("unexpected status '{}'", s)))
         }
     }
 }
 
-fn installedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+#[command]
+#[aliases("installedgaem")]
+pub fn installedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     game(ctx, msg, args, GameStatus::Installed)
 }
 
-fn ownedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+#[command]
+#[aliases("ownedgaem")]
+pub fn ownedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     game(ctx, msg, args, GameStatus::NotInstalled)
 }
 
-#[derive(Copy, Clone, Debug, Fail, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum UserLookupError {
-    #[fail(display = "too many possible options ({}) for query", _0)]
+    #[error("too many possible options ({}) for query", _0)]
     Ambiguous(usize),
 
-    #[fail(display = "user wasn't found in the guild")]
+    #[error("user wasn't found in the guild")]
     NotFound,
 }
 
@@ -203,22 +184,24 @@ pub fn get_user_id<S: AsRef<str>>(g: &Guild, s: S) -> StdResult<UserId, UserLook
     }
 }
 
-fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -> Result<()> {
-    let guild = msg.channel_id.to_channel()?
+#[command]
+#[aliases("gaem")]
+pub fn game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatus) -> Result<()> {
+    let guild = msg.channel_id.to_channel(ctx)?
         .guild()
-        .ok_or(err_msg("couldn't find guild"))?;
+        .ok_or(anyhow!("couldn't find guild"))?;
 
     let guild = guild.read()
-        .guild()
-        .ok_or(err_msg("couldn't find guild"))?;
+        .guild(ctx)
+        .ok_or(anyhow!("couldn't find guild"))?;
 
     let guild = guild
         .read();
 
-    let user_args = if args.rest().is_empty() {
+    let user_args: Vec<String> = if args.rest().is_empty() {
         Vec::new()
     } else {
-        args.multiple_quoted::<String>()?
+        args.quoted().iter::<String>().collect::<StdResult<Vec<_>, ArgError<Infallible>>>()?
     };
 
     let mut users = user_args
@@ -232,12 +215,12 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
 
             match possible {
                 Err(UserLookupError::NotFound) => {
-                    let _ = send(msg.channel_id, &format!("didn't recognize {}", &u), msg.tts);
+                    let _ = ctx.send(msg.channel_id, &format!("didn't recognize {}", &u), msg.tts);
                     None
                 },
                 Ok(x) => Some(x),
                 Err(UserLookupError::Ambiguous(x)) => {
-                    let _ = send(msg.channel_id, &format!("too many matches ({}) for {}", x, &u), msg.tts);
+                    let _ = ctx.send(msg.channel_id, &format!("too many matches ({}) for {}", x, &u), msg.tts);
                     None
                 },
             }
@@ -278,7 +261,7 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
 
     if inferred && users.len() < 2 || !inferred && users.len() < 1 {
         info!("too few known users to make game comparison");
-        send(msg.channel_id, "yer too lonely", msg.tts)?;
+        ctx.send(msg.channel_id, "yer too lonely", msg.tts)?;
         return Ok(());
     }
 
@@ -354,7 +337,7 @@ fn game(_ctx: &mut Context, msg: &Message, args: Args, min_status: GameStatus) -
         games_formatted = "**LITERALLY NOTHING**".to_owned();
     }
 
-    send(msg.channel_id, &games_formatted, msg.tts)
+    ctx.send(msg.channel_id, &games_formatted, msg.tts)
 }
 
 fn load_spreadsheet() -> Result<Vec<Vec<String>>> {
@@ -368,9 +351,7 @@ fn load_spreadsheet() -> Result<Vec<Vec<String>>> {
         .append_pair("key", &*SHEETS_API_KEY);
 
     let req = reqwest::Request::new(reqwest::Method::GET, u);
-
     let client = reqwest::Client::new();
-
     let mut resp = client.execute(req)?;
 
     #[derive(Deserialize)]
@@ -389,7 +370,9 @@ fn load_spreadsheet() -> Result<Vec<Vec<String>>> {
     Ok(resp.value_ranges.into_iter().next().unwrap().values)
 }
 
-fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+#[command]
+#[aliases("updategame")]
+pub fn updategaem(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     use regex::Regex;
 
     let arg_user = args.single_quoted::<String>();
@@ -399,13 +382,13 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     } else {
         use std::borrow::Borrow;
 
-        let guild = msg.channel_id.to_channel()?
+        let guild = msg.channel_id.to_channel(ctx)?
             .guild()
-            .ok_or(err_msg("couldn't find guild"))?;
+            .ok_or(anyhow!("couldn't find guild"))?;
 
         let guild = guild.read()
-            .guild()
-            .ok_or(err_msg("couldn't find guild"))?;
+            .guild(ctx)
+            .ok_or(anyhow!("couldn't find guild"))?;
 
         let guild = guild
             .read();
@@ -417,12 +400,12 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
     let username = match DISCORD_MAP.get(&user) {
         Some(s) => s,
-        None => return send(msg.channel_id, "WHO THE FUCK ARE YE", msg.tts),
+        None => return ctx.send(msg.channel_id, "WHO THE FUCK ARE YE", msg.tts),
     };
 
     let steam_id = match STEAM_MAP.get(&user) {
         Some(u) => u,
-        None => return send(msg.channel_id, "WHO ARE YE ON STEAM", msg.tts),
+        None => return ctx.send(msg.channel_id, "WHO ARE YE ON STEAM", msg.tts),
     };
 
     let spreadsheet = load_spreadsheet()?;
@@ -432,7 +415,7 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
     let user_column = match user_column {
         Some(c) => &spreadsheet[c][1..],
-        None => return send(msg.channel_id, "YER NOT IN THE SPREADSHEET", msg.tts),
+        None => return ctx.send(msg.channel_id, "YER NOT IN THE SPREADSHEET", msg.tts),
     };
 
     lazy_static! {
@@ -446,7 +429,7 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         Some(c) => &spreadsheet[c][1..],
         None => {
             error!("didn't find an appid column in the spreadsheet");
-            return send(msg.channel_id, "SPREADSHEET BROKE", msg.tts)
+            return ctx.send(msg.channel_id, "SPREADSHEET BROKE", msg.tts)
         },
     };
 
@@ -499,10 +482,10 @@ fn updategaem(_ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         .join("\n");
 
     if found_games.len() > 0 {
-        send(msg.channel_id, &format!("{} games owned on steam that are missing from the list:\n{}",
+        ctx.send(msg.channel_id, &format!("{} games owned on steam that are missing from the list:\n{}",
                                       found_games.chars().filter(|x| *x == '\n').count() + 1,
                                       found_games), msg.tts)
     } else {
-        send(msg.channel_id, "up to date", msg.tts)
+        ctx.send(msg.channel_id, "up to date", msg.tts)
     }
 }

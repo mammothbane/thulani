@@ -9,23 +9,23 @@ use serenity::{
 use statrs;
 
 use crate::{
-    commands::send,
     Result,
+    util::CtxExt,
 };
 
 #[derive(Parser)]
 #[grammar = "commands/calc.pest"]
 struct Calc;
 
-#[derive(Copy, Clone, Fail, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Error, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum CalcError {
-    #[fail(display = "pest was unable to parse the input")]
+    #[error("pest was unable to parse the input")]
     Pest,
 
-    #[fail(display = "invalid number format")]
+    #[error("invalid number format")]
     NumberFormat,
 
-    #[fail(display = "bad argument count")]
+    #[error("bad argument count")]
     ArgCount,
 }
 
@@ -143,9 +143,7 @@ impl Calc {
         fn eval_expr(p: Pairs<self::Rule>) -> StdResult<f64, CalcError> {
             CLIMBER.climb(
                 p,
-                |pair| {
-                    eval_single_pair(pair)
-                },
+                eval_single_pair,
                 |lhs, op, rhs| {
                     let lhs = lhs?;
                     let rhs = rhs?;
@@ -198,15 +196,17 @@ mod test {
     }
 }
 
-pub fn roll(_ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+#[command]
+#[aliases("calc", "calculate")]
+pub fn roll(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     match Calc::eval(args.rest()) {
         Ok(result) => {
             debug!("got calc result '{}'", result);
-            send(msg.channel_id, &format!("{}", result), msg.tts)
+            ctx.send(msg.channel_id, &format!("{}", result), msg.tts)
         },
         Err(e) => {
             error!("error encountered reading calc '{}': {}", args.rest(), e);
-            send(msg.channel_id, "I COULDN'T READ THAT YOU FUCK", msg.tts)
+            ctx.send(msg.channel_id, "I COULDN'T READ THAT YOU FUCK", msg.tts)
         },
     }
 }

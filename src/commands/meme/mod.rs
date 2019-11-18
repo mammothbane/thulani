@@ -37,7 +37,7 @@ fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Res
     let image = t.image(conn);
     let audio = t.audio(conn);
 
-    let create_msg = |m: CreateMessage| {
+    let create_msg = |m: &mut CreateMessage| {
         let ret = m.tts(should_tts);
 
         match t.content {
@@ -49,10 +49,11 @@ fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Res
     match image {
         Some(image) => {
             let image = image?;
-            msg.channel_id.send_files(vec!(AttachmentType::Bytes((&image.data, &image.filename))), create_msg)?;
+            msg.channel_id.send_files(ctx, vec!(AttachmentType::Bytes((&image.data, &image.filename))), create_msg)?;
         },
+
         None => match t.content {
-            Some(_) => { msg.channel_id.send_message(create_msg)?; },
+            Some(_) => { msg.channel_id.send_message(ctx, create_msg)?; },
             None => {},
         },
     };
@@ -64,7 +65,7 @@ fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Res
         let audio = audio?;
 
         {
-            let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+            let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
             let mut play_queue = queue_lock.write().unwrap();
 
             play_queue.meme_queue.push_back(PlayArgs{
@@ -76,7 +77,7 @@ fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Res
             });
         }
 
-        msg.react("📣")?;
+        msg.react(ctx, "📣")?;
     }
 
     Ok(())

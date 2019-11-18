@@ -8,7 +8,7 @@ use std::{
 
 use diesel::result::Error as DieselError;
 use serenity::{
-    framework::standard::Args,
+    framework::standard::{Args, Delimiter},
     model::channel::Message,
     prelude::*,
 };
@@ -19,7 +19,6 @@ use crate::{
         parse_times,
         ytdl_url,
     },
-    commands::send,
     db::{
         Audio,
         connection,
@@ -27,10 +26,16 @@ use crate::{
         NewMeme,
     },
     Result,
+    util::CtxExt,
 };
 
-pub fn addmeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
-    let mut args = Args::new(args.rest(), &[" ".to_owned(), "\n".to_owned(), "\t".to_owned()]);
+lazy_static! {
+    static ref delims: Vec<Delimiter> = vec![' '.into(), '\n'.into(), '\t'.into()];
+}
+
+#[command]
+pub fn addmeme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+    let mut args = Args::new(args.rest(), delims.as_ref());
 
     let title = args.single_quoted::<String>()?;
     let text = args.rest().to_owned();
@@ -40,7 +45,7 @@ pub fn addmeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
     let conn = connection()?;
 
     let image = msg.attachments.first()
-        .ok_or(::failure::err_msg("no attachment"))
+        .ok_or(anyhow!("no attachment"))
         .and_then(|att| {
             let data = att.download()?;
             Image::create(&conn, &att.filename, data, msg.author.id.0)
@@ -49,7 +54,7 @@ pub fn addmeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
 
     if image.is_none() && text.is_none() {
         warn!("tried to create non-audio meme with no image or text");
-        return send(msg.channel_id, "hahAA it's empty xdddd", msg.tts);
+        return ctx.send(msg.channel_id, "hahAA it's empty xdddd", msg.tts);
     }
 
     let save_result = NewMeme {
@@ -62,12 +67,12 @@ pub fn addmeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
 
     use diesel::result::DatabaseErrorKind;
     match save_result {
-        Ok(_) => msg.react("👌"),
+        Ok(_) => msg.react(ctx, "👌"),
         Err(e) => {
             if let Some(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) = e.downcast_ref::<DieselError>() {
                 error!("tried to create meme that already exists");
-                msg.react("❌")?;
-                return send(msg.channel_id, "that meme already exists", msg.tts);
+                msg.react(ctx, "❌")?;
+                return ctx.send(msg.channel_id, "that meme already exists", msg.tts);
             }
 
             return Err(e);
@@ -75,8 +80,9 @@ pub fn addmeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
     }
 }
 
-pub fn addaudiomeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
-    let mut args = Args::new(args.rest(), &[" ".to_owned(), "\n".to_owned(), "\t".to_owned()]);
+#[command]
+pub fn addaudiomeme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+    let mut args = Args::new(args.rest(), delims.as_ref());
 
     let title = args.single_quoted::<String>()?;
     let audio_str = args.single_quoted::<String>()?;
@@ -84,8 +90,8 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
     let elems = audio_str.split_whitespace().collect::<Vec<_>>();
 
     if elems.len() == 0 {
-        send(msg.channel_id, "are you stupid", msg.tts)?;
-        return Err(::failure::err_msg("no audio link was provided"))
+        ctx.send(msg.channel_id, "are you stupid", msg.tts)?;
+        return Err(anyhow!("no audio link was provided"))
     }
 
     let audio_link = Url::parse(elems[0])?;
@@ -133,7 +139,7 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
     let conn = connection()?;
 
     let image = msg.attachments.first()
-        .ok_or(::failure::err_msg("no attachment"))
+        .ok_or(anyhow!("no attachment"))
         .and_then(|att| {
             let data = att.download()?;
             Image::create(&conn, &att.filename, data, msg.author.id.0)
@@ -145,7 +151,7 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
 
     if bytes == 0 {
         debug!("read 0 bytes from audio reader");
-        return send(msg.channel_id, "🔇🔇🔇🔕🔕🔕🔕🔕🔇🔕🔕🔇🔕🔕📣📢📣📢📣", msg.tts);
+        return ctx.send(msg.channel_id, "🔇🔇🔇🔕🔕🔕🔕🔕🔇🔕🔕🔇🔕🔕📣📢📣📢📣", msg.tts);
     }
 
     let audio_id = Audio::create(&conn, audio_data, msg.author.id.0)?;
@@ -160,12 +166,12 @@ pub fn addaudiomeme(_: &mut Context, msg: &Message, args: Args) -> Result<()> {
 
     use diesel::result::DatabaseErrorKind;
     match save_result {
-        Ok(_) => msg.react("👌"),
+        Ok(_) => msg.react(ctx, "👌"),
         Err(e) => {
             if let Some(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) = e.downcast_ref::<DieselError>() {
                 error!("tried to create meme that already exists");
-                msg.react("❌")?;
-                return send(msg.channel_id, "that meme already exists", msg.tts);
+                msg.react(ctx, "❌")?;
+                return ctx.send(msg.channel_id, "that meme already exists", msg.tts);
             }
 
             return Err(e);

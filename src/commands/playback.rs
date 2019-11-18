@@ -12,9 +12,9 @@ use crate::{
         PlayQueue,
         VoiceManager,
     },
-    commands::send,
     Result,
     TARGET_GUILD_ID,
+    util::CtxExt,
 };
 
 pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
@@ -23,14 +23,14 @@ pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
     debug!("playing '{}'", url);
     if !url.starts_with("http") {
         warn!("got bad url argument to play: {}", url);
-        send(msg.channel_id, "bAD LiNk", msg.tts)?;
+        ctx.send(msg.channel_id, "bAD LiNk", msg.tts)?;
         return Ok(());
     }
 
     let url = match Url::parse(url) {
         Err(e) => {
             error!("bad url: {}", e);
-            return send(msg.channel_id, "INVALID URL", msg.tts);
+            return ctx.send(msg.channel_id, "INVALID URL", msg.tts);
         },
         Ok(u) => u,
     };
@@ -44,9 +44,9 @@ pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
         info!("detected imgur link");
 
         if msg.author.id.0 == 106160362109272064 {
-            send(msg.channel_id, "fuck you conway", true)?;
+            ctx.send(msg.channel_id, "fuck you conway", true)?;
         } else {
-            send(msg.channel_id, "IMGUR IS BAD, YOU TRASH CAN MAN", msg.tts)?;
+            ctx.send(msg.channel_id, "IMGUR IS BAD, YOU TRASH CAN MAN", msg.tts)?;
         }
 
         return Ok(());
@@ -54,7 +54,7 @@ pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
 
     let (start, end) = parse_times(&msg.content);
 
-    let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+    let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
     let mut play_queue = queue_lock.write().unwrap();
 
     play_queue.general_queue.push_back(PlayArgs{
@@ -68,6 +68,7 @@ pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
     Ok(())
 }
 
+#[command]
 pub fn play(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     if args.len() == 0 {
         return _resume(ctx, msg);
@@ -77,17 +78,18 @@ pub fn play(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         Ok(url) => url,
         Err(e) => {
             error!("unable to parse url from args: {}", e);
-            return send(msg.channel_id, "BAD LINK", msg.tts);
+            return ctx.send(msg.channel_id, "BAD LINK", msg.tts);
         },
     };
 
     _play(ctx, msg, &url)
 }
 
+#[command]
 pub fn pause(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
-    let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+    let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
 
-    let done = || send(msg.channel_id, "r u srs", msg.tts);
+    let done = || ctx.send(msg.channel_id, "r u srs", msg.tts);
     let playing = {
         let play_queue = queue_lock.read().unwrap();
 
@@ -115,14 +117,16 @@ pub fn pause(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     Ok(())
 }
 
+#[command]
+#[aliases("continue")]
 pub fn resume(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     _resume(ctx, msg)
 }
 
 fn _resume(ctx: &mut Context, msg: &Message) -> Result<()> {
-    let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+    let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
 
-    let done = || send(msg.channel_id, "r u srs", msg.tts);
+    let done = || ctx.send(msg.channel_id, "r u srs", msg.tts);
     let playing = {
         let play_queue = queue_lock.read().unwrap();
 
@@ -154,8 +158,10 @@ fn _resume(ctx: &mut Context, msg: &Message) -> Result<()> {
     Ok(())
 }
 
+#[command]
+#[aliases("next")]
 pub fn skip(ctx: &mut Context, _msg: &Message, _args: Args) -> Result<()> {
-    let data = ctx.data.lock();
+    let data = ctx.data.write();
 
     let mgr_lock = data.get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
@@ -174,8 +180,10 @@ pub fn skip(ctx: &mut Context, _msg: &Message, _args: Args) -> Result<()> {
     Ok(())
 }
 
+#[command]
+#[aliases("sudoku", "fuckoff", "stop")]
 pub fn die(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
-    let data = ctx.data.lock();
+    let data = ctx.data.write();
 
     let mgr_lock = data.get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
@@ -195,18 +203,20 @@ pub fn die(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
         handler.stop();
         handler.leave();
     } else {
-        send(msg.channel_id, "YOU die", msg.tts)?;
+        ctx.send(msg.channel_id, "YOU die", msg.tts)?;
         debug!("got die with no handler attached");
     }
 
     Ok(())
 }
 
+#[command]
+#[aliases("queue")]
 pub fn list(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
-    let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+    let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
     let play_queue = queue_lock.read().unwrap();
 
-    let channel_tmp = msg.channel().unwrap().guild().unwrap();
+    let channel_tmp = msg.channel(ctx).unwrap().guild().unwrap();
     let channel = channel_tmp.read();
 
     info!("listing queue");
@@ -220,11 +230,11 @@ pub fn list(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
                 Right(_) => "memeing".to_owned(),
             };
 
-            send(msg.channel_id, &format!("Currently {} {} ({})", status, playing_info, info.init_args.initiator), msg.tts)?;
+            ctx.send(msg.channel_id, &format!("Currently {} {} ({})", status, playing_info, info.init_args.initiator), msg.tts)?;
         },
         None => {
             debug!("`list` called with no items in queue");
-            send(msg.channel_id, "Nothing is playing you meme", msg.tts)?;
+            ctx.send(msg.channel_id, "Nothing is playing you meme", msg.tts)?;
             return Ok(());
         },
     }
@@ -237,7 +247,7 @@ pub fn list(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
                 Right(_) => "meme".to_owned(),
             };
 
-            let _ = channel.say(&format!("{} ({})", playing_info, info.initiator));
+            let _ = channel.say(ctx, &format!("{} ({})", playing_info, info.initiator));
         });
 
     Ok(())

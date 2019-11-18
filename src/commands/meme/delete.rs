@@ -9,25 +9,28 @@ use serenity::{
 };
 
 use crate::{
-    commands::send,
     db::{
         connection,
         delete_meme,
     },
     Result,
+    util::CtxExt,
 };
 
-pub fn delmeme(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+#[command]
+#[aliases("delmem")]
+pub fn delmeme(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     let title = args.single_quoted::<String>()?;
 
     let conn = connection()?;
+
     match delete_meme(&conn, &title, msg.author.id.0) {
-        Ok(_) => msg.react("💀"),
+        Ok(_) => msg.react(ctx, "💀"),
         Err(e) => {
             if let Some(NotFound) = e.downcast_ref::<DieselError>() {
-                msg.react("❓")?;
+                msg.react(ctx, "❓")?;
                 info!("attempted to delete nonexistent meme: '{}'", title);
-                send(msg.channel_id, "nice try", msg.tts)?;
+                ctx.send(msg.channel_id, "nice try", msg.tts)?;
                 return Ok(());
             }
 

@@ -6,13 +6,13 @@
 
 #![feature(box_syntax, box_patterns)]
 
+#[macro_use] extern crate anyhow;
 extern crate chrono;
 #[cfg(feature = "db")]
 #[macro_use] extern crate diesel;
 extern crate dotenv;
 #[macro_use] extern crate dotenv_codegen;
 extern crate either;
-#[macro_use] extern crate failure;
 extern crate fern;
 extern crate fnv;
 #[cfg_attr(test, macro_use)] extern crate itertools;
@@ -27,9 +27,10 @@ extern crate regex;
 extern crate reqwest;
 #[macro_use] extern crate serde;
 extern crate serde_json;
-extern crate serenity;
+#[macro_use] extern crate serenity;
 extern crate sha1;
 extern crate statrs;
+#[macro_use] extern crate thiserror;
 extern crate time;
 extern crate timeago;
 extern crate typemap;
@@ -47,13 +48,9 @@ use std::{
 
 use chrono::Datelike;
 use dotenv::dotenv;
-use failure::Error;
 use fnv::{FnvHashMap, FnvHashSet};
 use serenity::{
-    framework::{
-        standard::help_commands,
-        StandardFramework,
-    },
+    framework::StandardFramework,
     model::{
         gateway::Ready,
         id::{ChannelId, GuildId, MessageId, UserId},
@@ -84,7 +81,9 @@ mod commands;
 mod util;
 mod audio;
 
-pub type Result<T> = ::std::result::Result<T, Error>;
+pub type Error = anyhow::Error;
+
+pub type Result<T> = anyhow::Result<T>;
 
 lazy_static! {
     static ref TARGET_GUILD: u64 = dotenv!("TARGET_GUILD").parse().expect("unable to parse TARGET_GUILD as u64");
@@ -94,7 +93,7 @@ lazy_static! {
 
 struct Handler;
 impl EventHandler for Handler {
-    fn ready(&self, _: Context, r: Ready) {
+    fn ready(&self, ctx: Context, r: Ready) {
         let guild = r.guilds.iter()
             .find(|g| g.id().0 == *TARGET_GUILD);
 
@@ -103,20 +102,20 @@ impl EventHandler for Handler {
         }
 
         #[cfg(debug_assertions)] {
-            let _ = guild.map(|g| g.id().edit_nickname(Some("thulani (dev)")));
+            let _ = guild.map(|g| g.id().edit_nickname(ctx, Some("thulani (dev)")));
         }
 
         #[cfg(not(debug_assertions))] {
-            let _ = guild.map(|g| g.id().edit_nickname(Some("thulani")));
+            let _ = guild.map(|g| g.id().edit_nickname(ctx, Some("thulani")));
         }
     }
 
-    fn message_delete(&self, _ctx: Context, channel_id: ChannelId, deleted_message_id: MessageId) {
+    fn message_delete(&self, ctx: Context, channel_id: ChannelId, deleted_message_id: MessageId) {
         MESSAGE_WATCH.lock()
             .remove(&deleted_message_id)
             .iter()
             .for_each(|id| {
-                if let Err(e) = channel_id.delete_message(id) {
+                if let Err(e) = channel_id.delete_message(ctx, id) {
                     error!("deleting message: {}", e);
                 }
             });
@@ -161,15 +160,15 @@ fn run() -> Result<()> {
     let mut framework = StandardFramework::new()
         .configure(|c| c
             .allow_dm(false)
-            .allow_whitespace(true)
+            .with_whitespace(true)
             .prefixes(all_prefixes)
             .ignore_bots(true)
-            .on_mention(false)
+            .on_mention(None)
             .owners(vec![UserId(owner_id)].into_iter().collect())
             .case_insensitivity(true)
             .delimiter("\t")
         )
-        .before(move |_ctx, message, cmd| {
+        .before(move |ctx, message, cmd| {
             debug!("got command '{}' from user '{}' ({})", cmd, message.author.name, message.author.id);
             if !message.guild_id.map_or(false, |x| x.0 == *TARGET_GUILD) {
                 info!("rejecting command '{}' from user '{}': wrong guild", cmd, message.author.name);
@@ -202,7 +201,7 @@ fn run() -> Result<()> {
 
             info!("rejecting command '{}' from user '{}': {}", cmd, message.author.name, reason);
 
-            match crate::commands::send_result(message.channel_id, "no", message.tts) {
+            match ctx.send_result(message.channel_id, "no", message.tts) {
                 Err(e) => error!("sending restricted prefix response: {}", e),
                 Ok(msg_id) => {
                     let mut mp = MESSAGE_WATCH.lock();
@@ -212,17 +211,18 @@ fn run() -> Result<()> {
 
             return false;
         })
-        .after(|_ctx, msg, cmd, err| {
+        .after(|ctx, msg, cmd, err| {
             match err {
                 Ok(()) => {
                     trace!("command '{}' completed successfully", cmd);
                 },
+
                 Err(e) => {
-                    if let Err(e) = msg.react("❌") {
+                    if let Err(e) = msg.react(ctx, "❌") {
                         error!("reacting to failed message: {}", e);
                     }
 
-                    if let Err(e) = crate::commands::send(msg.channel_id, "BANIC", msg.tts) {
+                    if let Err(e) = ctx.send(msg.channel_id, "BANIC", msg.tts) {
                         error!("sending BANIC: {}", e);
                     }
 
@@ -230,13 +230,9 @@ fn run() -> Result<()> {
                 }
             }
         })
-        .bucket("Standard", 1, 10, 3)
-        .customised_help(help_commands::with_embeds, |c| {
-            c
-        });
+        .bucket("Standard", |b| b.delay(1).limit(20).time_span(60));
 
     framework = register_commands(framework);
-    framework = game::register(framework);
 
     client.with_framework(framework);
 

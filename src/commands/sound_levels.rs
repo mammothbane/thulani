@@ -6,15 +6,16 @@ use serenity::{
 
 use crate::{
     audio::{PlayQueue, VoiceManager},
-    commands::send,
     Result,
     TARGET_GUILD_ID,
+    util::CtxExt,
 };
 
 pub const DEFAULT_VOLUME: f32 = 0.10;
 
+#[command]
 pub fn mute(ctx: &mut Context, _: &Message, _: Args) -> Result<()> {
-    let mgr_lock = ctx.data.lock().get::<VoiceManager>().cloned().unwrap();
+    let mgr_lock = ctx.data.write().get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 
     manager.get_mut(*TARGET_GUILD_ID)
@@ -30,8 +31,9 @@ pub fn mute(ctx: &mut Context, _: &Message, _: Args) -> Result<()> {
     Ok(())
 }
 
+#[command]
 pub fn unmute(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
-    let mgr_lock = ctx.data.lock().get::<VoiceManager>().cloned().unwrap();
+    let mgr_lock = ctx.data.write().get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 
     manager.get_mut(*TARGET_GUILD_ID)
@@ -41,35 +43,36 @@ pub fn unmute(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
             } else {
                 handler.mute(false);
                 trace!("Unmuted");
-                let _ = send(msg.channel_id, "REEEEEEEEEEEEEE", msg.tts);
+                let _ = ctx.send(msg.channel_id, "REEEEEEEEEEEEEE", msg.tts);
             }
         });
 
     Ok(())
 }
 
+#[command]
 pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     if args.len() == 0 {
         let vol = {
-            let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+            let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
             let play_queue = queue_lock.read().unwrap();
             (play_queue.volume / DEFAULT_VOLUME * 100.0) as usize
         };
 
         trace!("reporting volume {}", vol);
 
-        return send(msg.channel_id, &format!("volume: {}%", vol), msg.tts);
+        return ctx.send(msg.channel_id, &format!("volume: {}%", vol), msg.tts);
     }
 
     let vol: usize = match args.single::<f32>() {
         Ok(vol) if vol.is_nan() => {
             warn!("reporting NaN volume");
-            return send(msg.channel_id, "you're a fuck", msg.tts);
+            return ctx.send(msg.channel_id, "you're a fuck", msg.tts);
         },
         Ok(vol) => vol as usize,
         Err(e) => {
             error!("parsing volume arg: {}", e);
-            return send(msg.channel_id, "???????", msg.tts)
+            return ctx.send(msg.channel_id, "???????", msg.tts)
         },
     };
 
@@ -84,7 +87,7 @@ pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         vol = 0.0;
     }
 
-    let queue_lock = ctx.data.lock().get::<PlayQueue>().cloned().unwrap();
+    let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
 
     {
         let mut play_queue = queue_lock.write().unwrap();
@@ -92,7 +95,7 @@ pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         info!("volume updated to {}", vol);
     }
 
-    send(msg.channel_id, format!("volume adjusted{}", adjusted_text), msg.tts)?;
+    ctx.send(msg.channel_id, format!("volume adjusted{}", adjusted_text), msg.tts)?;
 
     {
         let play_queue = queue_lock.read().unwrap();

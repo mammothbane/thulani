@@ -13,7 +13,6 @@ use timeago::{
 };
 
 use crate::{
-    commands::send,
     db::{
         connection,
         InvocationRecord,
@@ -22,6 +21,7 @@ use crate::{
     },
     must_env_lookup,
     Result,
+    util::CtxExt,
 };
 
 lazy_static! {
@@ -36,7 +36,9 @@ lazy_static! {
 
 static CLEAN_DATE_FORMAT: &'static str = "%b %-e %Y";
 
-pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
+#[command]
+#[aliases("what")]
+pub fn wat(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let conn = connection()?;
 
     let record = match InvocationRecord::last(&conn) {
@@ -44,10 +46,10 @@ pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
         Err(e) => {
             if let Some(NotFound) = e.downcast_ref::<DieselError>() {
                 info!("found no memes in history");
-                return send(msg.channel_id, "no one has ever memed before", msg.tts);
+                return ctx.send(msg.channel_id, "no one has ever memed before", msg.tts);
             }
 
-            send(msg.channel_id, "BAD MEME BAD MEME", msg.tts)?;
+            ctx.send(msg.channel_id, "BAD MEME BAD MEME", msg.tts)?;
             return Err(e);
         },
     };
@@ -57,19 +59,19 @@ pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
     match meme {
         Ok(ref meme) => {
             let metadata = Metadata::find(&conn, meme.metadata_id)?;
-            let author = crate::TARGET_GUILD_ID.member(metadata.created_by as u64)?;
+            let author = crate::TARGET_GUILD_ID.member(ctx, metadata.created_by as u64)?;
 
-            send(msg.channel_id,
+            ctx.send(msg.channel_id,
                  &format!("that was \"{}\" by {} ({})",
                           meme.title, author.mention(), metadata.created.date().format(CLEAN_DATE_FORMAT)), msg.tts)?
         },
         Err(e) => {
             if let Some(NotFound) = e.downcast_ref::<DieselError>() {
                 info!("last meme not found in database");
-                return send(msg.channel_id, "heuueueeeeh?", msg.tts);
+                return ctx.send(msg.channel_id, "heuueueeeeh?", msg.tts);
             }
 
-            send(msg.channel_id, "do i look like i know what a jpeg is", msg.tts)?;
+            ctx.send(msg.channel_id, "do i look like i know what a jpeg is", msg.tts)?;
             return Err(e);
         },
     };
@@ -77,7 +79,8 @@ pub fn wat(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
     meme.map(|_| {})
 }
 
-pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+#[command]
+pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     use itertools::Itertools;
 
     lazy_static! {
@@ -91,7 +94,7 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
     if n > *MAX_HIST {
         debug!("user requested more than MAX_HIST ({}) items from history", *MAX_HIST);
-        send(msg.channel_id, "YER PUSHIN ME OVER THE FUCKIN LINE", true)?;
+        ctx.send(msg.channel_id, "YER PUSHIN ME OVER THE FUCKIN LINE", true)?;
     }
 
     let n = n.min(*MAX_HIST);
@@ -100,7 +103,7 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
     if records.len() == 0 {
         info!("no memes in history");
-        return send(msg.channel_id, "i don't remember anything :(", msg.tts);
+        return ctx.send(msg.channel_id, "i don't remember anything :(", msg.tts);
     }
 
     info!("reporting meme history (len {})", n);
@@ -118,8 +121,8 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
                     Metadata::find(&conn, meme.metadata_id).map(|metadata| (metadata, meme))
                 })
                 .map(|(metadata, meme)| {
-                    let author_name = crate::TARGET_GUILD_ID.member(metadata.created_by as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
-                    let invoker_name = crate::TARGET_GUILD_ID.member(rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    let author_name = crate::TARGET_GUILD_ID.member(ctx, metadata.created_by as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    let invoker_name = crate::TARGET_GUILD_ID.member(ctx, rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
                     format!("{}. [{}{}] \"{}\" by {} ({}). invoked by {}.", i + 1, rand, ago, meme.title, author_name, metadata.created.date().format(CLEAN_DATE_FORMAT), invoker_name)
                 })
                 .unwrap_or_else(|e| {
@@ -129,16 +132,18 @@ pub fn history(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
                         }
                     }
 
-                    let invoker_name = crate::TARGET_GUILD_ID.member(rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    let invoker_name = crate::TARGET_GUILD_ID.member(ctx, rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
                     format!("{}. [{}{}] not found. invoked by {}.", i + 1, rand, ago, invoker_name)
                 })
         })
         .join("\n");
 
-    send(msg.channel_id, &resp, false)
+    ctx.send(msg.channel_id, &resp, false)
 }
 
-pub fn stats(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
+#[command]
+#[aliases("stat")]
+pub fn stats(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     use db;
     use serenity::model::{
         id::UserId,
@@ -151,11 +156,11 @@ pub fn stats(_: &mut Context, msg: &Message, _: Args) -> Result<()> {
 
     debug!("reporting stats");
 
-    let rand_user: User = UserId(stats.most_random_meme_user).to_user()?;
-    let direct_user: User = UserId(stats.most_directly_named_meme_user).to_user()?;
+    let rand_user: User = UserId(stats.most_random_meme_user).to_user(ctx)?;
+    let direct_user: User = UserId(stats.most_directly_named_meme_user).to_user(ctx)?;
 
-    let rand_user = rand_user.nick_in(*TARGET_GUILD_ID).unwrap_or(rand_user.name);
-    let direct_user = direct_user.nick_in(*TARGET_GUILD_ID).unwrap_or(direct_user.name);
+    let rand_user = rand_user.nick_in(ctx, *TARGET_GUILD_ID).unwrap_or(rand_user.name);
+    let direct_user = direct_user.nick_in(ctx, *TARGET_GUILD_ID).unwrap_or(direct_user.name);
 
     let s = format!(
         r#"
@@ -197,10 +202,11 @@ and *{}* was the most-memed overall ({})"#,
         stats.most_popular_random_meme, stats.most_popular_random_meme_count,
         stats.most_popular_meme_overall, stats.most_popular_meme_overall_count,
     );
-    send(msg.channel_id, s, msg.tts)
+    ctx.send(msg.channel_id, s, msg.tts)
 }
 
-pub fn memers(_: &mut Context, msg: &Message, _args: Args) -> Result<()> {
+#[command]
+pub fn memers(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
     use db;
     use itertools::Itertools;
     use serenity::model::{
@@ -211,8 +217,8 @@ pub fn memers(_: &mut Context, msg: &Message, _args: Args) -> Result<()> {
     let s = db::memers()?
         .into_iter()
         .map(|info| {
-            let user = UserId(info.user_id).to_user()?;
-            let username = user.nick_in(*TARGET_GUILD_ID).unwrap_or(user.name);
+            let user = UserId(info.user_id).to_user(ctx)?;
+            let username = user.nick_in(ctx, *TARGET_GUILD_ID).unwrap_or(user.name);
 
             let res = format!(
                 "**{}**: {} total, {} random, {} specific. favorite meme: *{}* ({})",
@@ -230,15 +236,15 @@ pub fn memers(_: &mut Context, msg: &Message, _args: Args) -> Result<()> {
         .into_iter()
         .join("\n");
 
-    send(msg.channel_id, &s, msg.tts)
+    ctx.send(msg.channel_id, &s, msg.tts)
 }
 
-pub fn query(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+#[command]
+pub fn query(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     use std::borrow::Borrow;
 
     use itertools::Itertools;
     use regex::Regex;
-    use failure::err_msg;
     use serenity::model::id::UserId;
 
     use crate::{
@@ -252,19 +258,19 @@ pub fn query(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         static ref AGE_REGEX: Regex = Regex::new(r"(?i)(?:age|order)=(.*)").unwrap();
     }
 
-    let guild = msg.channel_id.to_channel()?
+    let guild = msg.channel_id.to_channel(ctx)?
         .guild()
-        .ok_or(err_msg("couldn't find guild"))?;
+        .ok_or(anyhow!("couldn't find guild"))?;
 
     let guild = guild.read()
-        .guild()
-        .ok_or(err_msg("couldn't find guild"))?;
+        .guild(ctx)
+        .ok_or(anyhow!("couldn't find guild"))?;
 
     let guild = guild
         .read();
 
     let creator: Option<u64> = {
-        let creator = args.current_quoted().map(|s| CREATOR_REGEX.is_match(s)).unwrap_or(false);
+        let creator = args.quoted().current().map(|s| CREATOR_REGEX.is_match(s)).unwrap_or(false);
         if creator {
             args.single_quoted::<String>()
                 .ok()
@@ -276,12 +282,12 @@ pub fn query(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     };
 
     let order = {
-        let order = args.current_quoted().map(|s| AGE_REGEX.is_match(s)).unwrap_or(false);
+        let order = args.quoted().current().map(|s| AGE_REGEX.is_match(s)).unwrap_or(false);
 
         if order {
             args.single_quoted::<String>().ok()
                 .and_then(|s| AGE_REGEX.captures(&s).and_then(|c| c.get(1)).map(|x| x.as_str().to_owned()))
-                .map(|s| s.contains("new"))
+                .map(|s: String| s.contains("new"))
                 .unwrap_or(true)
         } else {
             true
@@ -291,8 +297,8 @@ pub fn query(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     let result = db::query_meme(args.rest(), creator, order)?
         .into_iter()
         .map(|(meme, metadata)| {
-            let user = UserId(metadata.created_by as u64).to_user()?;
-            let username = user.nick_in(*TARGET_GUILD_ID).unwrap_or(user.name);
+            let user = UserId(metadata.created_by as u64).to_user(ctx)?;
+            let username = user.nick_in(ctx, *TARGET_GUILD_ID).unwrap_or(user.name);
 
             Ok(format!("*{}* by **{}** ({}). text length: **{}**, image: **{}**, audio: **{}**",
                        meme.title,
@@ -318,8 +324,8 @@ pub fn query(_: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
     if result.len() == 0 {
         info!("no memes matched query");
-        return send(msg.channel_id, "no match".to_owned(), msg.tts);
+        return ctx.send(msg.channel_id, "no match".to_owned(), msg.tts);
     }
 
-    send(msg.channel_id, &result, msg.tts)
+    ctx.send(msg.channel_id, &result, msg.tts)
 }
