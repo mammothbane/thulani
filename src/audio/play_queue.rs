@@ -8,6 +8,7 @@ use std::{
 };
 
 use either::{Left, Right};
+use typemap::Key;
 use log::{
     debug,
     error,
@@ -19,7 +20,6 @@ use serenity::{
     prelude::*,
     voice,
 };
-use typemap::Key;
 
 use crate::{
     audio::{
@@ -130,7 +130,8 @@ impl PlayQueue {
             queue.general_queue.pop_front().unwrap()
         };
 
-        let src = match &mut item.data {
+        let mut audio_source = Cursor::new(Vec::new());
+        match &mut item.data {
             Left(ref url) => {
                 let youtube_url = ytdl_url(url.as_str())?;
 
@@ -147,7 +148,7 @@ impl PlayQueue {
                     vec! []
                 };
 
-                let ffmpeg_command = process::Command::new("ffmpeg")
+                let mut ffmpeg_command = process::Command::new("ffmpeg")
                     .arg("-i")
                     .arg(youtube_url)
                     .args(duration_opts)
@@ -163,17 +164,27 @@ impl PlayQueue {
                     .stdin(process::Stdio::null())
                     .spawn()?;
 
-                let audio_reader = ffmpeg_command.stdout.unwrap();
 
-                let pre_silence = vec![0u8; PRE_SILENCE_BYTES];
-                let post_silence = vec![0u8; POST_SILENCE_BYTES];
 
-                let reader = Cursor::new(pre_silence).chain(audio_reader).chain(Cursor::new(post_silence));
+                thread::spawn(move || {
+                    {
+                        let mut audio_reader = ffmpeg_command.stdout.as_mut();
 
-                voice::pcm(true, reader)
+                        if let Err(e) = io::copy(audio_reader.unwrap(), &mut audio_source) {
+                            use std::io::ErrorKind;
+                            if e.kind() == ErrorKind::BrokenPipe {
+                                debug!("ffmpeg closed unexpectedly");
+                            } else {
+                                error!("copying audio from ffmpeg {}", e);
+                            }
+                        }
+                    }
+
+                    ffmpeg_command.wait();
+                });
             },
             Right(ref vec) => {
-                let transcoder = process::Command::new("ffmpeg")
+                let mut transcoder = process::Command::new("ffmpeg")
                     .args(&[
                         "-format", "opus",
                         "-i", "pipe:0",
@@ -187,45 +198,62 @@ impl PlayQueue {
                     .spawn()
                     .expect("unable to call ffmpeg");
 
-                let process::Child {
-                    stdin,
-                    stderr,
-                    stdout,
-                    ..
-                } = transcoder;
-
+                let vec = vec.clone();
                 thread::spawn(move || {
-                    let stderr = BufReader::new(stderr.unwrap());
+                    {
+                        let process::Child {
+                            stdin,
+                            stderr,
+                            stdout,
+                            ..
+                        } = &mut transcoder;
 
-                    for line in stderr.lines() {
-                        let line = line.unwrap();
+                        crossbeam::scope(|s| {
+                            let writer = s.spawn(|_| {
+                                if let Err(e) = io::copy(&mut Cursor::new(vec), stdin.as_mut().unwrap()) {
+                                    use std::io::ErrorKind;
+                                    if e.kind() == ErrorKind::BrokenPipe {
+                                        debug!("ffmpeg closed unexpectedly");
+                                    } else {
+                                        error!("copying audio to ffmpeg {}", e);
+                                    }
+                                }
+                            });
 
-                        trace!("{}", line);
-                    }
-                });
+                            let reader = s.spawn(|_| {
+                                if let Err(e) = io::copy(stdout.as_mut().unwrap(), &mut audio_source) {
+                                    use std::io::ErrorKind;
+                                    if e.kind() == ErrorKind::BrokenPipe {
+                                        debug!("ffmpeg closed unexpectedly");
+                                    } else {
+                                        error!("copying audio from ffmpeg {}", e);
+                                    }
+                                }
+                            });
 
-                let v = vec.clone();
-                thread::spawn(move || {
-                    if let Err(e) = io::copy(&mut Cursor::new(v), &mut stdin.unwrap()) {
-                        use std::io::ErrorKind;
-                        if e.kind() == ErrorKind::BrokenPipe {
-                            debug!("ffmpeg closed unexpectedly");
-                        } else {
-                            error!("copying audio to ffmpeg {}", e);
+                            writer.join();
+                            reader.join();
+                        });
+
+                        let stderr = BufReader::new(stderr.as_mut().unwrap());
+
+                        trace!("ffmpeg output:");
+                        for line in stderr.lines() {
+                            let line = line.unwrap();
+
+                            trace!("{}", line);
                         }
                     }
+
+                    transcoder.wait();
                 });
-
-                let pre_silence = vec![0u8; PRE_SILENCE_BYTES];
-                let post_silence = vec![0u8; POST_SILENCE_BYTES];
-
-                let reader = Cursor::new(pre_silence)
-                    .chain(stdout.unwrap())
-                    .chain(Cursor::new(post_silence));
-
-                voice::pcm(true, reader)
             }
         };
+
+        let pre_silence = vec![0u8; PRE_SILENCE_BYTES];
+        let post_silence = vec![0u8; POST_SILENCE_BYTES];
+
+        let src = voice::pcm(true, Cursor::new(pre_silence).chain(audio_source).chain(Cursor::new(post_silence)));
 
         let mut manager = voice_manager.lock();
         let handler = manager.join(*TARGET_GUILD_ID, must_env_lookup::<u64>("VOICE_CHANNEL"));
