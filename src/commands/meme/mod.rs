@@ -2,7 +2,6 @@ use diesel::PgConnection;
 use log::debug;
 use rand::{Rng, thread_rng};
 use serenity::{
-    builder::CreateMessage,
     framework::standard::macros::group,
     http::AttachmentType,
     model::channel::Message,
@@ -60,24 +59,30 @@ fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Res
     let image = t.image(conn);
     let audio = t.audio(conn);
 
-    let create_msg = |m: &mut CreateMessage| {
-        let ret = m.tts(should_tts);
-
-        match t.content {
-            Some(ref text) if text.len() > 0 => ret.content(text),
-            _ => ret,
-        }
-    };
-
     match image {
         Some(image) => {
             let image = image?;
-            msg.channel_id.send_files(ctx, vec!(AttachmentType::Bytes((&image.data, &image.filename))), create_msg)?;
+            msg.channel_id.send_files(ctx, vec!(AttachmentType::Bytes((&image.data, &image.filename))), |m| {
+                let ret = m.tts(should_tts);
+
+                match t.content {
+                    Some(ref text) if text.len() > 0 => ret.content(text),
+                    _ => ret,
+                }
+            })?;
         },
 
         None => match t.content {
-            Some(_) => { msg.channel_id.send_message(ctx, create_msg)?; },
+            Some(_) => { msg.channel_id.send_message(ctx, |m| {
+                let ret = m.tts(should_tts);
+
+                match t.content {
+                    Some(ref text) if text.len() > 0 => ret.content(text),
+                    _ => ret,
+                }
+            })?; },
             None => {},
+
         },
     };
 

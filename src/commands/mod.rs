@@ -13,7 +13,7 @@ use crate::{
 pub use self::{
     playback::*,
     sound_levels::*,
-    roll::roll,
+    roll::{roll, ROLL_COMMAND},
 };
 #[cfg(feature = "diesel")]
 pub use self::meme::*;

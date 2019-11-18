@@ -7,7 +7,6 @@ use log::{
 use serenity::{
     framework::standard::{
         Args,
-        CommandResult,
         macros::command,
     },
     model::channel::Message,
@@ -15,6 +14,7 @@ use serenity::{
 };
 
 use crate::{
+    Result,
     audio::{PlayQueue, VoiceManager},
     TARGET_GUILD_ID,
     util::CtxExt,
@@ -23,7 +23,7 @@ use crate::{
 pub const DEFAULT_VOLUME: f32 = 0.10;
 
 #[command]
-pub fn mute(ctx: &mut Context, _: &Message, _: Args) -> CommandResult {
+pub fn mute(ctx: &mut Context, _: &Message, _: Args) -> Result<()> {
     let mgr_lock = ctx.data.write().get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 
@@ -41,7 +41,7 @@ pub fn mute(ctx: &mut Context, _: &Message, _: Args) -> CommandResult {
 }
 
 #[command]
-pub fn unmute(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
+pub fn unmute(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let mgr_lock = ctx.data.write().get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 
@@ -60,7 +60,7 @@ pub fn unmute(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
 }
 
 #[command]
-pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
+pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     if args.len() == 0 {
         let vol = {
             let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();

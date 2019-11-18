@@ -8,7 +8,6 @@ use log::{
 use serenity::{
     framework::standard::{
         Args,
-        CommandResult,
         macros::{command, group},
     },
     model::channel::Message,
@@ -22,8 +21,10 @@ use crate::{
         PlayQueue,
         VoiceManager,
     },
+    Result,
     TARGET_GUILD_ID,
     util::CtxExt,
+    commands::sound_levels::*,
 };
 
 group!({
@@ -44,7 +45,7 @@ group!({
     ],
 });
 
-pub fn _play(ctx: &Context, msg: &Message, url: &str) -> CommandResult {
+pub fn _play(ctx: &Context, msg: &Message, url: &str) -> Result<()> {
     use url::{Url, Host};
 
     debug!("playing '{}'", url);
@@ -96,7 +97,7 @@ pub fn _play(ctx: &Context, msg: &Message, url: &str) -> CommandResult {
 }
 
 #[command]
-pub fn play(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
+pub fn play(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     if args.len() == 0 {
         return _resume(ctx, msg);
     }
@@ -113,7 +114,7 @@ pub fn play(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
 }
 
 #[command]
-pub fn pause(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
+pub fn pause(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
 
     let done = || ctx.send(msg.channel_id, "r u srs", msg.tts);
@@ -146,11 +147,11 @@ pub fn pause(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
 
 #[command]
 #[aliases("continue")]
-pub fn resume(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
+pub fn resume(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     _resume(ctx, msg)
 }
 
-fn _resume(ctx: &mut Context, msg: &Message) -> CommandResult {
+fn _resume(ctx: &mut Context, msg: &Message) -> Result<()> {
     let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
 
     let done = || ctx.send(msg.channel_id, "r u srs", msg.tts);
@@ -187,7 +188,7 @@ fn _resume(ctx: &mut Context, msg: &Message) -> CommandResult {
 
 #[command]
 #[aliases("next")]
-pub fn skip(ctx: &mut Context, _msg: &Message, _args: Args) -> CommandResult {
+pub fn skip(ctx: &mut Context, _msg: &Message, _args: Args) -> Result<()> {
     let data = ctx.data.write();
 
     let mgr_lock = data.get::<VoiceManager>().cloned().unwrap();
@@ -209,7 +210,7 @@ pub fn skip(ctx: &mut Context, _msg: &Message, _args: Args) -> CommandResult {
 
 #[command]
 #[aliases("sudoku", "fuckoff", "stop")]
-pub fn die(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
+pub fn die(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let data = ctx.data.write();
 
     let mgr_lock = data.get::<VoiceManager>().cloned().unwrap();
@@ -239,11 +240,11 @@ pub fn die(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
 
 #[command]
 #[aliases("queue")]
-pub fn list(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
+pub fn list(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
     let play_queue = queue_lock.read().unwrap();
 
-    let channel_tmp = msg.channel(ctx).unwrap().guild().unwrap();
+    let channel_tmp = msg.channel(&ctx).unwrap().guild().unwrap();
     let channel = channel_tmp.read();
 
     info!("listing queue");
@@ -274,7 +275,7 @@ pub fn list(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
                 Right(_) => "meme".to_owned(),
             };
 
-            let _ = channel.say(ctx, &format!("{} ({})", playing_info, info.initiator));
+            let _ = channel.say(&ctx, &format!("{} ({})", playing_info, info.initiator));
         });
 
     Ok(())

@@ -99,7 +99,7 @@ impl EventHandler for Handler {
             .remove(&deleted_message_id)
             .iter()
             .for_each(|id| {
-                if let Err(e) = channel_id.delete_message(ctx, id) {
+                if let Err(e) = channel_id.delete_message(&ctx, id) {
                     error!("deleting message: {}", e);
                 }
             });
@@ -202,7 +202,7 @@ fn run() -> Result<()> {
                 },
 
                 Err(e) => {
-                    if let Err(e) = msg.react(ctx, "❌") {
+                    if let Err(e) = msg.react(&ctx, "❌") {
                         error!("reacting to failed message: {}", e);
                     }
 

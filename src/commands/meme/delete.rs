@@ -6,7 +6,6 @@ use log::info;
 use serenity::{
     framework::standard::{
         Args,
-        CommandResult,
         macros::command,
     },
     model::channel::Message,
@@ -14,6 +13,7 @@ use serenity::{
 };
 
 use crate::{
+    Result,
     db::{
         connection,
         delete_meme,
@@ -23,7 +23,7 @@ use crate::{
 
 #[command]
 #[aliases("delmem")]
-pub fn delmeme(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
+pub fn delmeme(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     let title = args.single_quoted::<String>()?;
 
     let conn = connection()?;
@@ -32,7 +32,7 @@ pub fn delmeme(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResul
         Ok(_) => msg.react(ctx, "💀"),
         Err(e) => {
             if let Some(NotFound) = e.downcast_ref::<DieselError>() {
-                msg.react(ctx, "❓")?;
+                msg.react(&ctx, "❓")?;
                 info!("attempted to delete nonexistent meme: '{}'", title);
                 ctx.send(msg.channel_id, "nice try", msg.tts)?;
                 return Ok(());

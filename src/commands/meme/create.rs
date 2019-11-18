@@ -14,7 +14,7 @@ use log::{
 };
 use serenity::{
     framework::standard::{
-        Args, CommandResult,
+        Args,
         Delimiter,
         macros::command,
     },
@@ -27,6 +27,7 @@ use anyhow::anyhow;
 use lazy_static::lazy_static;
 
 use crate::{
+    Result,
     audio::{
         parse_times,
         ytdl_url,
@@ -41,12 +42,12 @@ use crate::{
 };
 
 lazy_static! {
-    static ref delims: Vec<Delimiter> = vec![' '.into(), '\n'.into(), '\t'.into()];
+    static ref DELIMS: Vec<Delimiter> = vec![' '.into(), '\n'.into(), '\t'.into()];
 }
 
 #[command]
-pub fn addmeme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
-    let mut args = Args::new(args.rest(), delims.as_ref());
+pub fn addmeme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+    let mut args = Args::new(args.rest(), DELIMS.as_ref());
 
     let title = args.single_quoted::<String>()?;
     let text = args.rest().to_owned();
@@ -78,11 +79,11 @@ pub fn addmeme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
 
     use diesel::result::DatabaseErrorKind;
     match save_result {
-        Ok(_) => msg.react(ctx, "👌"),
+        Ok(_) => msg.react(&ctx, "👌"),
         Err(e) => {
             if let Some(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) = e.downcast_ref::<DieselError>() {
                 error!("tried to create meme that already exists");
-                msg.react(ctx, "❌")?;
+                msg.react(&ctx, "❌")?;
                 return ctx.send(msg.channel_id, "that meme already exists", msg.tts);
             }
 
@@ -92,8 +93,8 @@ pub fn addmeme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
 }
 
 #[command]
-pub fn addaudiomeme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
-    let mut args = Args::new(args.rest(), delims.as_ref());
+pub fn addaudiomeme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+    let mut args = Args::new(args.rest(), DELIMS.as_ref());
 
     let title = args.single_quoted::<String>()?;
     let audio_str = args.single_quoted::<String>()?;
@@ -177,11 +178,11 @@ pub fn addaudiomeme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResu
 
     use diesel::result::DatabaseErrorKind;
     match save_result {
-        Ok(_) => msg.react(ctx, "👌"),
+        Ok(_) => msg.react(&ctx, "👌"),
         Err(e) => {
             if let Some(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) = e.downcast_ref::<DieselError>() {
                 error!("tried to create meme that already exists");
-                msg.react(ctx, "❌")?;
+                msg.react(&ctx, "❌")?;
                 return ctx.send(msg.channel_id, "that meme already exists", msg.tts);
             }
 

@@ -25,7 +25,6 @@ use serenity::{
     framework::standard::{
         ArgError,
         Args,
-        CommandResult,
         macros::{command, group},
     },
     model::{
@@ -152,13 +151,13 @@ impl FromStr for GameStatus {
 
 #[command]
 #[aliases("installedgaem")]
-pub fn installedgame(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
+pub fn installedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     _game(ctx, msg, args, GameStatus::Installed)
 }
 
 #[command]
 #[aliases("ownedgaem")]
-pub fn ownedgame(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
+pub fn ownedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     _game(ctx, msg, args, GameStatus::NotInstalled)
 }
 
@@ -215,17 +214,17 @@ pub fn get_user_id<S: AsRef<str>>(g: &Guild, s: S) -> StdResult<UserId, UserLook
 
 #[command]
 #[aliases("gaem")]
-fn game(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
+fn game(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     _game(ctx, msg, args, GameStatus::Installed)
 }
 
-fn _game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatus) -> CommandResult {
-    let guild = msg.channel_id.to_channel(ctx)?
+fn _game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatus) -> Result<()> {
+    let guild = msg.channel_id.to_channel(&ctx)?
         .guild()
         .ok_or(anyhow!("couldn't find guild"))?;
 
     let guild = guild.read()
-        .guild(ctx)
+        .guild(&ctx)
         .ok_or(anyhow!("couldn't find guild"))?;
 
     let guild = guild
@@ -407,7 +406,7 @@ fn load_spreadsheet() -> Result<Vec<Vec<String>>> {
 
 #[command]
 #[aliases("updategame")]
-pub fn updategaem(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
+pub fn updategaem(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     use regex::Regex;
 
     let arg_user = args.single_quoted::<String>();
@@ -417,12 +416,12 @@ pub fn updategaem(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandRe
     } else {
         use std::borrow::Borrow;
 
-        let guild = msg.channel_id.to_channel(ctx)?
+        let guild = msg.channel_id.to_channel(&ctx)?
             .guild()
             .ok_or(anyhow!("couldn't find guild"))?;
 
         let guild = guild.read()
-            .guild(ctx)
+            .guild(&ctx)
             .ok_or(anyhow!("couldn't find guild"))?;
 
         let guild = guild

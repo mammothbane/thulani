@@ -10,7 +10,6 @@ use log::{
 use serenity::{
     framework::standard::{
         Args,
-        CommandResult,
         macros::command,
     },
     model::channel::Message,
@@ -51,7 +50,7 @@ static CLEAN_DATE_FORMAT: &'static str = "%b %-e %Y";
 
 #[command]
 #[aliases("what")]
-pub fn wat(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
+pub fn wat(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let conn = connection()?;
 
     let record = match InvocationRecord::last(&conn) {
@@ -72,7 +71,7 @@ pub fn wat(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
     match meme {
         Ok(ref meme) => {
             let metadata = Metadata::find(&conn, meme.metadata_id)?;
-            let author = crate::TARGET_GUILD_ID.member(ctx, metadata.created_by as u64)?;
+            let author = crate::TARGET_GUILD_ID.member(&ctx, metadata.created_by as u64)?;
 
             ctx.send(msg.channel_id,
                  &format!("that was \"{}\" by {} ({})",
@@ -93,7 +92,7 @@ pub fn wat(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
 }
 
 #[command]
-pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
+pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     use itertools::Itertools;
 
     lazy_static! {
@@ -134,8 +133,8 @@ pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResul
                     Metadata::find(&conn, meme.metadata_id).map(|metadata| (metadata, meme))
                 })
                 .map(|(metadata, meme)| {
-                    let author_name = crate::TARGET_GUILD_ID.member(ctx, metadata.created_by as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
-                    let invoker_name = crate::TARGET_GUILD_ID.member(ctx, rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    let author_name = crate::TARGET_GUILD_ID.member(&ctx, metadata.created_by as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    let invoker_name = crate::TARGET_GUILD_ID.member(&ctx, rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
                     format!("{}. [{}{}] \"{}\" by {} ({}). invoked by {}.", i + 1, rand, ago, meme.title, author_name, metadata.created.date().format(CLEAN_DATE_FORMAT), invoker_name)
                 })
                 .unwrap_or_else(|e| {
@@ -145,7 +144,7 @@ pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResul
                         }
                     }
 
-                    let invoker_name = crate::TARGET_GUILD_ID.member(ctx, rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    let invoker_name = crate::TARGET_GUILD_ID.member(&ctx, rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
                     format!("{}. [{}{}] not found. invoked by {}.", i + 1, rand, ago, invoker_name)
                 })
         })
@@ -156,7 +155,7 @@ pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResul
 
 #[command]
 #[aliases("stat")]
-pub fn stats(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
+pub fn stats(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     use db;
     use serenity::model::{
         id::UserId,
@@ -169,11 +168,11 @@ pub fn stats(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
 
     debug!("reporting stats");
 
-    let rand_user: User = UserId(stats.most_random_meme_user).to_user(ctx)?;
-    let direct_user: User = UserId(stats.most_directly_named_meme_user).to_user(ctx)?;
+    let rand_user: User = UserId(stats.most_random_meme_user).to_user(&ctx)?;
+    let direct_user: User = UserId(stats.most_directly_named_meme_user).to_user(&ctx)?;
 
-    let rand_user = rand_user.nick_in(ctx, *TARGET_GUILD_ID).unwrap_or(rand_user.name);
-    let direct_user = direct_user.nick_in(ctx, *TARGET_GUILD_ID).unwrap_or(direct_user.name);
+    let rand_user = rand_user.nick_in(&ctx, *TARGET_GUILD_ID).unwrap_or(rand_user.name);
+    let direct_user = direct_user.nick_in(&ctx, *TARGET_GUILD_ID).unwrap_or(direct_user.name);
 
     let s = format!(
         r#"
@@ -219,7 +218,7 @@ and *{}* was the most-memed overall ({})"#,
 }
 
 #[command]
-pub fn memers(ctx: &mut Context, msg: &Message, _args: Args) -> CommandResult {
+pub fn memers(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
     use db;
     use itertools::Itertools;
     use serenity::model::{
@@ -230,8 +229,8 @@ pub fn memers(ctx: &mut Context, msg: &Message, _args: Args) -> CommandResult {
     let s = db::memers()?
         .into_iter()
         .map(|info| {
-            let user = UserId(info.user_id).to_user(ctx)?;
-            let username = user.nick_in(ctx, *TARGET_GUILD_ID).unwrap_or(user.name);
+            let user = UserId(info.user_id).to_user(&ctx)?;
+            let username = user.nick_in(&ctx, *TARGET_GUILD_ID).unwrap_or(user.name);
 
             let res = format!(
                 "**{}**: {} total, {} random, {} specific. favorite meme: *{}* ({})",
@@ -253,7 +252,7 @@ pub fn memers(ctx: &mut Context, msg: &Message, _args: Args) -> CommandResult {
 }
 
 #[command]
-pub fn query(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
+pub fn query(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     use std::borrow::Borrow;
 
     use itertools::Itertools;
@@ -271,12 +270,12 @@ pub fn query(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult 
         static ref AGE_REGEX: Regex = Regex::new(r"(?i)(?:age|order)=(.*)").unwrap();
     }
 
-    let guild = msg.channel_id.to_channel(ctx)?
+    let guild = msg.channel_id.to_channel(&ctx)?
         .guild()
         .ok_or(anyhow!("couldn't find guild"))?;
 
     let guild = guild.read()
-        .guild(ctx)
+        .guild(&ctx)
         .ok_or(anyhow!("couldn't find guild"))?;
 
     let guild = guild
@@ -310,8 +309,8 @@ pub fn query(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult 
     let result = db::query_meme(args.rest(), creator, order)?
         .into_iter()
         .map(|(meme, metadata)| {
-            let user = UserId(metadata.created_by as u64).to_user(ctx)?;
-            let username = user.nick_in(ctx, *TARGET_GUILD_ID).unwrap_or(user.name);
+            let user = UserId(metadata.created_by as u64).to_user(&ctx)?;
+            let username = user.nick_in(&ctx, *TARGET_GUILD_ID).unwrap_or(user.name);
 
             Ok(format!("*{}* by **{}** ({}). text length: **{}**, image: **{}**, audio: **{}**",
                        meme.title,

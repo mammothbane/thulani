@@ -7,7 +7,6 @@ use log::info;
 use serenity::{
     framework::standard::{
         Args,
-        CommandResult,
         macros::command,
     },
     model::channel::Message,
@@ -16,6 +15,7 @@ use serenity::{
 
 use crate::{
     commands::meme::send_meme,
+    Result,
     db::{
         self,
         connection,
@@ -27,19 +27,19 @@ use crate::{
 
 #[command]
 #[aliases("mem")]
-pub fn meme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
+pub fn meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     _meme(ctx, msg, args, AudioPlayback::Optional)
 }
 
 #[command]
 #[aliases("audiomeme", "audiomem")]
-pub fn audio_meme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
+pub fn audio_meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     _meme(ctx, msg, args, AudioPlayback::Required)
 }
 
 #[command]
 #[aliases("silentmeme", "silentmem")]
-pub fn silent_meme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
+pub fn silent_meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
     _meme(ctx, msg, args, AudioPlayback::Prohibited)
 }
 
@@ -50,7 +50,7 @@ enum AudioPlayback {
     Prohibited,
 }
 
-fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_playback: AudioPlayback) -> CommandResult {
+fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_playback: AudioPlayback) -> Result<()> {
     if args.len() == 0 || audio_playback != AudioPlayback::Optional {
         return rand_meme(ctx, msg, audio_playback);
     }
@@ -78,7 +78,7 @@ fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_playback: AudioPlay
     send_meme(ctx, &mem, &conn, msg)
 }
 
-fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) -> CommandResult {
+fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) -> Result<()> {
     let conn = connection()?;
 
     let should_audio = ctx.users_listening()?;
@@ -112,7 +112,7 @@ fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) ->
 
 #[command]
 #[aliases("rarememe", "raremem")]
-pub fn rare_meme(ctx: &mut Context, msg: &Message, _args: Args) -> CommandResult {
+pub fn rare_meme(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
     let should_audio = ctx.users_listening()?;
 
     let conn = connection()?;
