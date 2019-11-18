@@ -22,7 +22,6 @@ use crate::{
         find_meme,
         InvocationRecord,
     },
-    Result,
     util::CtxExt,
 };
 

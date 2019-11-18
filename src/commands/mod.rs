@@ -9,12 +9,11 @@ use serenity::{
 use crate::{
     util::CtxExt,
 };
-#[cfg(feature = "games")]
-use crate::game::*;
 
 pub use self::{
     playback::*,
     sound_levels::*,
+    roll::roll,
 };
 #[cfg(feature = "diesel")]
 pub use self::meme::*;
@@ -30,7 +29,7 @@ group!({
         only_in: "guild",
     },
     commands: [
-        roll::roll,
+        roll,
     ],
 });
 

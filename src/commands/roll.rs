@@ -20,7 +20,6 @@ use thiserror::Error;
 use lazy_static::lazy_static;
 
 use crate::{
-    Result,
     util::CtxExt,
 };
 

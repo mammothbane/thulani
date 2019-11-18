@@ -16,7 +16,6 @@ use serenity::{
 
 use crate::{
     audio::{PlayQueue, VoiceManager},
-    Result,
     TARGET_GUILD_ID,
     util::CtxExt,
 };

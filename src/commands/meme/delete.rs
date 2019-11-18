@@ -18,7 +18,6 @@ use crate::{
         connection,
         delete_meme,
     },
-    Result,
     util::CtxExt,
 };
 

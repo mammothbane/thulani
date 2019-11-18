@@ -22,7 +22,6 @@ use crate::{
         PlayQueue,
         VoiceManager,
     },
-    Result,
     TARGET_GUILD_ID,
     util::CtxExt,
 };

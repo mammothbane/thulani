@@ -20,7 +20,6 @@ use log::{
 };
 use serde::{
     Deserialize,
-    Serialize,
 };
 use serenity::{
     framework::standard::{

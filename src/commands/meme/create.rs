@@ -37,7 +37,6 @@ use crate::{
         Image,
         NewMeme,
     },
-    Result,
     util::CtxExt,
 };
 
