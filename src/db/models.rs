@@ -1,5 +1,10 @@
 use chrono::naive::NaiveDateTime;
-use diesel::prelude::*;
+use diesel::{
+    Identifiable,
+    Insertable,
+    prelude::*,
+    Queryable,
+};
 
 use crate::{
     db::schema::*,
@@ -57,7 +62,7 @@ impl NewMeme {
 
 
 #[derive(Queryable, Identifiable, PartialEq, Debug)]
-#[table_name="audio"]
+#[table_name = "audio"]
 pub struct Audio {
     pub id: i32,
     pub data: Vec<u8>,
@@ -97,7 +102,7 @@ impl Audio {
 }
 
 #[derive(Insertable, PartialEq, Debug)]
-#[table_name="audio"]
+#[table_name = "audio"]
 pub struct NewAudio {
     pub data: Vec<u8>,
     pub metadata_id: i32,

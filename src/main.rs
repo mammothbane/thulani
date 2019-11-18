@@ -6,35 +6,10 @@
 
 #![feature(box_syntax, box_patterns)]
 
-#[macro_use] extern crate anyhow;
-extern crate chrono;
-#[cfg(feature = "db")]
+// trash dependencies that can't be fucked to upgrade to ed. 2018
 #[macro_use] extern crate diesel;
-extern crate dotenv;
 #[macro_use] extern crate dotenv_codegen;
-extern crate either;
-extern crate fern;
-extern crate fnv;
-#[cfg_attr(test, macro_use)] extern crate itertools;
-#[macro_use] extern crate lazy_static;
-#[macro_use] extern crate log;
-extern crate pest;
 #[macro_use] extern crate pest_derive;
-#[cfg(feature = "db")] extern crate postgres;
-#[cfg(feature = "db")] extern crate r2d2_postgres;
-extern crate rand;
-extern crate regex;
-extern crate reqwest;
-#[macro_use] extern crate serde;
-extern crate serde_json;
-#[macro_use] extern crate serenity;
-extern crate sha1;
-extern crate statrs;
-#[macro_use] extern crate thiserror;
-extern crate time;
-extern crate timeago;
-extern crate typemap;
-extern crate url;
 
 use std::{
     default::Default,
@@ -47,8 +22,13 @@ use std::{
 };
 
 use chrono::Datelike;
-use dotenv::dotenv;
 use fnv::{FnvHashMap, FnvHashSet};
+use log::{
+    debug,
+    error,
+    info,
+    trace,
+};
 use serenity::{
     framework::StandardFramework,
     model::{
@@ -57,6 +37,10 @@ use serenity::{
     },
     prelude::*,
 };
+
+use anyhow::anyhow;
+use dotenv::{dotenv, var as dvar};
+use lazy_static::lazy_static;
 
 use self::commands::register_commands;
 pub use self::util::*;
@@ -130,7 +114,7 @@ lazy_static! {
 
 
 fn run() -> Result<()> {
-    let token = &dotenv::var("THULANI_TOKEN").map_err(|_| format_err!("missing token"))?;
+    let token = &dvar("THULANI_TOKEN").map_err(|_| anyhow!("missing token"))?;
     let mut client = Client::new(token, Handler)?;
 
     audio::VoiceManager::register(&mut client);

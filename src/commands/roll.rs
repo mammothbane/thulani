@@ -1,12 +1,23 @@
 use std::result::Result as StdResult;
 
+use log::{
+    debug,
+    error,
+};
 use rand::prelude::*;
 use serenity::{
-    framework::standard::Args,
+    framework::standard::{
+        Args,
+        CommandResult,
+        macros::command,
+    },
     model::channel::Message,
     prelude::*,
 };
 use statrs;
+use thiserror::Error;
+
+use lazy_static::lazy_static;
 
 use crate::{
     Result,
@@ -198,7 +209,7 @@ mod test {
 
 #[command]
 #[aliases("calc", "calculate")]
-pub fn roll(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+pub fn roll(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     match Calc::eval(args.rest()) {
         Ok(result) => {
             debug!("got calc result '{}'", result);

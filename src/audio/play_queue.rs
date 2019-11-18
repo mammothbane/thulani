@@ -8,6 +8,11 @@ use std::{
 };
 
 use either::{Left, Right};
+use log::{
+    debug,
+    error,
+    trace,
+};
 use serenity::{
     CacheAndHttp,
     client::bridge::voice::ClientVoiceManager,

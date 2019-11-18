@@ -2,8 +2,13 @@ use diesel::{
     NotFound,
     result::Error as DieselError,
 };
+use log::info;
 use serenity::{
-    framework::standard::Args,
+    framework::standard::{
+        Args,
+        CommandResult,
+        macros::command,
+    },
     model::channel::Message,
     prelude::*,
 };
@@ -19,7 +24,7 @@ use crate::{
 
 #[command]
 #[aliases("delmem")]
-pub fn delmeme(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+pub fn delmeme(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
     let title = args.single_quoted::<String>()?;
 
     let conn = connection()?;
@@ -34,7 +39,8 @@ pub fn delmeme(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
                 return Ok(());
             }
 
-            Err(e)
+            Err(e)?;
+            Ok(())
         }
     }
 }

@@ -7,12 +7,24 @@ use std::{
 };
 
 use diesel::result::Error as DieselError;
+use log::{
+    debug,
+    error,
+    warn,
+};
 use serenity::{
-    framework::standard::{Args, Delimiter},
+    framework::standard::{
+        Args, CommandResult,
+        Delimiter,
+        macros::command,
+    },
     model::channel::Message,
     prelude::*,
 };
 use url::Url;
+
+use anyhow::anyhow;
+use lazy_static::lazy_static;
 
 use crate::{
     audio::{
@@ -34,7 +46,7 @@ lazy_static! {
 }
 
 #[command]
-pub fn addmeme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+pub fn addmeme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     let mut args = Args::new(args.rest(), delims.as_ref());
 
     let title = args.single_quoted::<String>()?;
@@ -81,7 +93,7 @@ pub fn addmeme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
 }
 
 #[command]
-pub fn addaudiomeme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+pub fn addaudiomeme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     let mut args = Args::new(args.rest(), delims.as_ref());
 
     let title = args.single_quoted::<String>()?;

@@ -3,8 +3,13 @@ use diesel::{
     result::Error as DieselError,
 };
 use itertools::Itertools;
+use log::info;
 use serenity::{
-    framework::standard::Args,
+    framework::standard::{
+        Args,
+        CommandResult,
+        macros::command,
+    },
     model::channel::Message,
     prelude::*,
 };
@@ -23,22 +28,19 @@ use crate::{
 
 #[command]
 #[aliases("mem")]
-#[inline]
-pub fn meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+pub fn meme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     _meme(ctx, msg, args, AudioPlayback::Optional)
 }
 
 #[command]
 #[aliases("audiomeme", "audiomem")]
-#[inline]
-pub fn audio_meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+pub fn audio_meme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     _meme(ctx, msg, args, AudioPlayback::Required)
 }
 
 #[command]
 #[aliases("silentmeme", "silentmem")]
-#[inline]
-pub fn silent_meme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+pub fn silent_meme(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     _meme(ctx, msg, args, AudioPlayback::Prohibited)
 }
 
@@ -49,7 +51,7 @@ enum AudioPlayback {
     Prohibited,
 }
 
-fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_playback: AudioPlayback) -> Result<()> {
+fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_playback: AudioPlayback) -> CommandResult {
     if args.len() == 0 || audio_playback != AudioPlayback::Optional {
         return rand_meme(ctx, msg, audio_playback);
     }
@@ -77,9 +79,7 @@ fn _meme(ctx: &mut Context, msg: &Message, args: Args, audio_playback: AudioPlay
     send_meme(ctx, &mem, &conn, msg)
 }
 
-#[command]
-#[aliases("rarememe", "raremem")]
-fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) -> Result<()> {
+fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) -> CommandResult {
     let conn = connection()?;
 
     let should_audio = ctx.users_listening()?;
@@ -93,7 +93,8 @@ fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) ->
     match mem {
         Ok(mem) => {
             InvocationRecord::create(&conn, message.author.id.0, message.id.0, mem.id, true)?;
-            send_meme(ctx, &mem, &conn, message).map_err(Error::from)
+            send_meme(ctx, &mem, &conn, message)?;
+            Ok(())
         },
         Err(e) => {
             match e.downcast_ref::<DieselError>() {
@@ -112,7 +113,7 @@ fn rand_meme(ctx: &Context, message: &Message, audio_playback: AudioPlayback) ->
 
 #[command]
 #[aliases("rarememe", "raremem")]
-pub fn rare_meme(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
+pub fn rare_meme(ctx: &mut Context, msg: &Message, _args: Args) -> CommandResult {
     let should_audio = ctx.users_listening()?;
 
     let conn = connection()?;

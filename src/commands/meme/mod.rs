@@ -1,7 +1,9 @@
 use diesel::PgConnection;
+use log::debug;
 use rand::{Rng, thread_rng};
 use serenity::{
     builder::CreateMessage,
+    framework::standard::macros::group,
     http::AttachmentType,
     model::channel::Message,
     prelude::*,
@@ -27,6 +29,27 @@ mod history;
 mod create;
 mod invoke;
 mod delete;
+
+group!({
+    name: "memes",
+    options: {
+        only_in: "guild",
+    },
+    commands: [
+        meme,
+        audio_meme,
+        silent_Meme,
+        addmeme,
+        addaudiomeme,
+        delmeme,
+        wat,
+        stats,
+        history,
+        rare_meme,
+        memers,
+        query,
+    ],
+});
 
 fn send_meme(ctx: &Context, t: &Meme, conn: &PgConnection, msg: &Message) -> Result<()> {
     let should_tts = t.content.as_ref().map(|t| t.len() > 0).unwrap_or(false) &&

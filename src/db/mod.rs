@@ -19,6 +19,9 @@ use r2d2_postgres::{
     TlsMode,
 };
 
+use anyhow::anyhow;
+use lazy_static::lazy_static;
+
 use crate::{Error, Result};
 
 pub use self::models::*;

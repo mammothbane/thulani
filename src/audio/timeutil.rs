@@ -1,8 +1,10 @@
-use regex::{
-    Regex,
-    Match,
-};
 use chrono::Duration;
+use regex::{
+    Match,
+    Regex,
+};
+
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref START_REGEX: Regex =
@@ -47,8 +49,9 @@ pub fn parse_times<A: AsRef<str>>(s: A) -> (Option<Duration>, Option<Duration>) 
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use time::Duration;
+
+    use super::*;
 
     #[test]
     fn test_start() {

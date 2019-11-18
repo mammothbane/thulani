@@ -2,8 +2,17 @@ use diesel::{
     NotFound,
     result::Error as DieselError,
 };
+use log::{
+    debug,
+    error,
+    info,
+};
 use serenity::{
-    framework::standard::Args,
+    framework::standard::{
+        Args,
+        CommandResult,
+        macros::command,
+    },
     model::channel::Message,
     prelude::*,
 };
@@ -12,8 +21,12 @@ use timeago::{
     TimeUnit,
 };
 
+use anyhow::anyhow;
+use lazy_static::lazy_static;
+
 use crate::{
     db::{
+        self,
         connection,
         InvocationRecord,
         Meme,
@@ -38,7 +51,7 @@ static CLEAN_DATE_FORMAT: &'static str = "%b %-e %Y";
 
 #[command]
 #[aliases("what")]
-pub fn wat(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
+pub fn wat(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
     let conn = connection()?;
 
     let record = match InvocationRecord::last(&conn) {
@@ -80,7 +93,7 @@ pub fn wat(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
 }
 
 #[command]
-pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
     use itertools::Itertools;
 
     lazy_static! {
@@ -143,7 +156,7 @@ pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
 
 #[command]
 #[aliases("stat")]
-pub fn stats(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
+pub fn stats(ctx: &mut Context, msg: &Message, _: Args) -> CommandResult {
     use db;
     use serenity::model::{
         id::UserId,
@@ -206,7 +219,7 @@ and *{}* was the most-memed overall ({})"#,
 }
 
 #[command]
-pub fn memers(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
+pub fn memers(ctx: &mut Context, msg: &Message, _args: Args) -> CommandResult {
     use db;
     use itertools::Itertools;
     use serenity::model::{
@@ -240,7 +253,7 @@ pub fn memers(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
 }
 
 #[command]
-pub fn query(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+pub fn query(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
     use std::borrow::Borrow;
 
     use itertools::Itertools;

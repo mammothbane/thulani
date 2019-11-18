@@ -3,6 +3,7 @@ use std::{
     str::FromStr,
 };
 
+use dotenv;
 use serenity::{
     client::Context,
     model::{
@@ -14,6 +15,8 @@ use serenity::{
     }
 };
 use url::Url;
+
+use lazy_static::lazy_static;
 
 use crate::{
     audio::PlayQueue,

@@ -1,5 +1,9 @@
+use log::info;
 use serenity::{
-    framework::StandardFramework,
+    framework::{
+        StandardFramework,
+        standard::macros::group,
+    },
 };
 
 use crate::{
@@ -19,42 +23,27 @@ pub(crate) mod playback;
 pub(crate) mod sound_levels;
 pub(crate) mod roll;
 
-group!("playback", {
-    options: {
-        only_in: "guild",
-    },
-    commands: [
-        skip,
-        pause,
-        resume,
-        list,
-        die,
-        mute,
-        unmute,
-        play,
-        volume,
-    ],
-});
 
-group!("general", {
+group!({
+    name: "general",
     options: {
         only_in: "guild",
     },
     commands: [
-        roll,
+        roll::roll,
     ],
 });
 
 pub fn register_commands(f: StandardFramework) -> StandardFramework {
     let result = f
-        .group(&PLAYBACK_GROUP)
+        .group(&self::playback::PLAYBACK_GROUP)
         .group(&GENERAL_GROUP);
 
     #[cfg(feature = "diesel")]
-    let result = result.group(&MEMES_GROUP);
+    let result = result.group(&self::meme::MEMES_GROUP);
 
     #[cfg(feature = "games")]
-    let result = result.group(&GAME_GROUP);
+    let result = result.group(&crate::game::GAME_GROUP);
 
     result.unrecognised_command(|ctx, msg, unrec| {
         let url = match msg.content.split_whitespace().skip(1).next() {
@@ -70,38 +59,6 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
     })
 }
 
-#[cfg(feature = "games")]
-group!("game", {
-    options: {
-        only_in: "guild",
-    },
-    commands: [
-        installedgame,
-        ownedgame,
-        updategaem,
-    ],
-});
 
 #[cfg(feature = "diesel")]
 mod meme;
-
-#[cfg(feature = "diesel")]
-group!("memes", {
-    options: {
-        only_in: "guild",
-    },
-    commands: [
-        meme,
-        audio_meme,
-        silent_Meme,
-        addmeme,
-        addaudiomeme,
-        delmeme,
-        wat,
-        stats,
-        history,
-        rare_meme,
-        memers,
-        query,
-    ],
-});

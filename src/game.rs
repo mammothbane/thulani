@@ -8,16 +8,26 @@ use std::{
     },
 };
 
-use anyhow::Error;
 use fnv::{
     FnvHashMap,
     FnvHashSet,
 };
 use itertools::Itertools;
+use log::{
+    debug,
+    error,
+    info,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serenity::{
     framework::standard::{
         ArgError,
         Args,
+        CommandResult,
+        macros::{command, group},
     },
     model::{
         channel::Message,
@@ -28,12 +38,32 @@ use serenity::{
 };
 use url::Url;
 
+use anyhow::{
+    anyhow,
+    Error,
+};
+use lazy_static::lazy_static;
+
 use crate::{
     must_env_lookup,
     Result,
     util::CtxExt,
     VOICE_CHANNEL_ID,
 };
+
+pub use self::GAME_GROUP as GROUP;
+
+group!({
+    name: "game",
+    options: {
+        only_in: "guild",
+    },
+    commands: [
+        installedgame,
+        ownedgame,
+        updategaem,
+    ],
+});
 
 lazy_static! {
     static ref SHEETS_API_KEY: String = must_env_lookup("SHEETS_API_KEY");
@@ -123,17 +153,17 @@ impl FromStr for GameStatus {
 
 #[command]
 #[aliases("installedgaem")]
-pub fn installedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
-    game(ctx, msg, args, GameStatus::Installed)
+pub fn installedgame(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
+    _game(ctx, msg, args, GameStatus::Installed)
 }
 
 #[command]
 #[aliases("ownedgaem")]
-pub fn ownedgame(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
-    game(ctx, msg, args, GameStatus::NotInstalled)
+pub fn ownedgame(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
+    _game(ctx, msg, args, GameStatus::NotInstalled)
 }
 
-#[derive(Copy, Clone, Debug, Error, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, thiserror::Error, PartialEq, Eq, Hash)]
 pub enum UserLookupError {
     #[error("too many possible options ({}) for query", _0)]
     Ambiguous(usize),
@@ -186,7 +216,11 @@ pub fn get_user_id<S: AsRef<str>>(g: &Guild, s: S) -> StdResult<UserId, UserLook
 
 #[command]
 #[aliases("gaem")]
-pub fn game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatus) -> Result<()> {
+fn game(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
+    _game(ctx, msg, args, GameStatus::Installed)
+}
+
+fn _game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatus) -> CommandResult {
     let guild = msg.channel_id.to_channel(ctx)?
         .guild()
         .ok_or(anyhow!("couldn't find guild"))?;
@@ -337,7 +371,9 @@ pub fn game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameSt
         games_formatted = "**LITERALLY NOTHING**".to_owned();
     }
 
-    ctx.send(msg.channel_id, &games_formatted, msg.tts)
+    ctx.send(msg.channel_id, &games_formatted, msg.tts)?;
+
+    Ok(())
 }
 
 fn load_spreadsheet() -> Result<Vec<Vec<String>>> {
@@ -372,7 +408,7 @@ fn load_spreadsheet() -> Result<Vec<Vec<String>>> {
 
 #[command]
 #[aliases("updategame")]
-pub fn updategaem(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
+pub fn updategaem(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
     use regex::Regex;
 
     let arg_user = args.single_quoted::<String>();
