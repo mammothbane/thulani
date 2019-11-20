@@ -22,6 +22,7 @@ use serenity::{
 };
 
 use crate::{
+    io_split,
     audio::{
         CurrentItem,
         PlayArgs,
@@ -130,7 +131,8 @@ impl PlayQueue {
             queue.general_queue.pop_front().unwrap()
         };
 
-        let mut audio_source = Cursor::new(Vec::new());
+        let (audio_reader, mut audio_writer) = io_split(Cursor::new(Vec::new()));
+
         match &mut item.data {
             Left(ref url) => {
                 let youtube_url = ytdl_url(url.as_str())?;
@@ -160,17 +162,15 @@ impl PlayQueue {
                         "-",
                     ])
                     .stdout(process::Stdio::piped())
-                    .stderr(process::Stdio::null())
+                    .stderr(process::Stdio::piped())
                     .stdin(process::Stdio::null())
                     .spawn()?;
 
-
-
                 thread::spawn(move || {
                     {
-                        let mut audio_reader = ffmpeg_command.stdout.as_mut();
+                        let audio_reader = ffmpeg_command.stdout.as_mut();
 
-                        if let Err(e) = io::copy(audio_reader.unwrap(), &mut audio_source) {
+                        if let Err(e) = io::copy(audio_reader.unwrap(), &mut audio_writer) {
                             use std::io::ErrorKind;
                             if e.kind() == ErrorKind::BrokenPipe {
                                 debug!("ffmpeg closed unexpectedly");
@@ -180,7 +180,21 @@ impl PlayQueue {
                         }
                     }
 
-                    ffmpeg_command.wait();
+                    {
+                        let stderr = ffmpeg_command.stderr.as_mut().unwrap();
+                        let stderr = BufReader::new(stderr);
+
+                        trace!("ffmpeg output:");
+                        for line in stderr.lines() {
+                            let line = line.unwrap();
+
+                            trace!("{}", line);
+                        }
+                    }
+
+                    if let Err(e) = ffmpeg_command.wait() {
+                        error!("waiting for ffmpeg to complete: {}", e);
+                    }
                 });
             },
             Right(ref vec) => {
@@ -208,7 +222,7 @@ impl PlayQueue {
                             ..
                         } = &mut transcoder;
 
-                        crossbeam::scope(|s| {
+                        let result = crossbeam::scope(|s| {
                             let writer = s.spawn(|_| {
                                 if let Err(e) = io::copy(&mut Cursor::new(vec), stdin.as_mut().unwrap()) {
                                     use std::io::ErrorKind;
@@ -221,19 +235,28 @@ impl PlayQueue {
                             });
 
                             let reader = s.spawn(|_| {
-                                if let Err(e) = io::copy(stdout.as_mut().unwrap(), &mut audio_source) {
+                                if let Err(e) = io::copy(stdout.as_mut().unwrap(), &mut audio_writer) {
                                     use std::io::ErrorKind;
                                     if e.kind() == ErrorKind::BrokenPipe {
                                         debug!("ffmpeg closed unexpectedly");
                                     } else {
-                                        error!("copying audio from ffmpeg {}", e);
+                                        error!("copying audio from ffmpeg: {}", e);
                                     }
                                 }
                             });
 
-                            writer.join();
-                            reader.join();
+                            if let Err(e) = writer.join() {
+                                error!("closing writer thread: {:?}", e);
+                            }
+
+                            if let Err(e) = reader.join() {
+                                error!("closing reader thread: {:?}", e);
+                            }
                         });
+
+                        if let Err(e) = result {
+                            error!("reader/writer scope error: {:?}", e);
+                        }
 
                         let stderr = BufReader::new(stderr.as_mut().unwrap());
 
@@ -245,7 +268,9 @@ impl PlayQueue {
                         }
                     }
 
-                    transcoder.wait();
+                    if let Err(e) = transcoder.wait() {
+                        error!("waiting for transcode process: {}", e);
+                    }
                 });
             }
         };
@@ -253,7 +278,7 @@ impl PlayQueue {
         let pre_silence = vec![0u8; PRE_SILENCE_BYTES];
         let post_silence = vec![0u8; POST_SILENCE_BYTES];
 
-        let src = voice::pcm(true, Cursor::new(pre_silence).chain(audio_source).chain(Cursor::new(post_silence)));
+        let src = voice::pcm(true, Cursor::new(pre_silence).chain(audio_reader).chain(Cursor::new(post_silence)));
 
         let mut manager = voice_manager.lock();
         let handler = manager.join(*TARGET_GUILD_ID, must_env_lookup::<u64>("VOICE_CHANNEL"));

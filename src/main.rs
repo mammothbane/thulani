@@ -1,9 +1,7 @@
-#![feature(impl_trait_in_bindings)]
 #![feature(try_trait)]
 #![feature(pattern)]
 #![feature(concat_idents)]
 #![feature(associated_type_defaults)]
-
 #![feature(box_syntax, box_patterns)]
 
 // trash dependencies that can't be fucked to upgrade to ed. 2018
@@ -43,7 +41,9 @@ use dotenv::{dotenv, var as dvar};
 use lazy_static::lazy_static;
 
 use self::commands::register_commands;
+
 pub use self::util::*;
+pub use self::iosplit::io_split;
 
 #[cfg(feature = "diesel")]
 mod db;
@@ -61,6 +61,7 @@ mod game {
     }
 }
 
+mod iosplit;
 mod commands;
 mod util;
 mod audio;
