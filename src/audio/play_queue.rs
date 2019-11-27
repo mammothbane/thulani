@@ -170,13 +170,20 @@ impl PlayQueue {
                     {
                         let audio_reader = ffmpeg_command.stdout.as_mut();
 
-                        if let Err(e) = io::copy(audio_reader.unwrap(), &mut audio_writer) {
-                            use std::io::ErrorKind;
-                            if e.kind() == ErrorKind::BrokenPipe {
-                                debug!("ffmpeg closed unexpectedly");
-                            } else {
-                                error!("copying audio from ffmpeg {}", e);
-                            }
+                        trace!("copying audio from ffmpeg");
+                        let result = io::copy(audio_reader.unwrap(), &mut audio_writer);
+                        trace!("done copying audio from ffmpeg");
+
+                        match result {
+                            Ok(count) => trace!("copied {} bytes", count),
+                            Err(e) => {
+                                use std::io::ErrorKind;
+                                if e.kind() == ErrorKind::BrokenPipe {
+                                    debug!("ffmpeg closed unexpectedly");
+                                } else {
+                                    error!("copying audio from ffmpeg {}", e);
+                                }
+                            },
                         }
                     }
 
