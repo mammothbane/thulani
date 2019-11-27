@@ -199,9 +199,11 @@ impl PlayQueue {
                         }
                     }
 
-                    if let Err(e) = ffmpeg_command.wait() {
-                        error!("waiting for ffmpeg to complete: {}", e);
-                    }
+                    trace!("waiting for ffmpeg command to complete");
+//                    if let Err(e) = ffmpeg_command.wait() {
+//                        error!("waiting for ffmpeg to complete: {}", e);
+//                    }
+                    trace!("ffmpeg command completed");
                 });
             },
             Right(ref vec) => {

@@ -262,7 +262,7 @@ fn main() {
                 ))
             })
             .level(log::LevelFilter::Warn)
-            .level_for("thulani", log::LevelFilter::Debug)
+            .level_for("thulani", log::LevelFilter::Trace)
             .chain(std::io::stdout())
         )
         .chain(fern::Dispatch::new()
