@@ -1,12 +1,3 @@
-/target/
-**/*.rs.bk
-.env
-.vscode
-*.log
-user_id_mapping.json
-restrict.json
-config.toml
-
 # The directory Mix will write compiled artifacts to.
 /_build/
 

@@ -1,0 +1,10 @@
+[thulani]
+token = "aaaaaaa"
+database_url = "bbbbbbb"
+spreadsheet_id = "google_sheets_id"
+sheets_api_key = "cccccccccc"
+max_sheet_column = "ZZZ"
+steam_api_key = "ddddddddddd"
+max_hist = 30
+default_hist = 5
+prefixes = ["thulani", "thulando", "thulando madando"]
