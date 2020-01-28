@@ -2,7 +2,9 @@ use log::info;
 use serenity::{
     framework::{
         StandardFramework,
-        standard::macros::group,
+        standard::{
+            macros::group,
+        },
     },
 };
 
@@ -21,6 +23,7 @@ pub use self::meme::*;
 pub(crate) mod playback;
 pub(crate) mod sound_levels;
 pub(crate) mod roll;
+mod help;
 
 
 group!({
@@ -44,18 +47,20 @@ pub fn register_commands(f: StandardFramework) -> StandardFramework {
     #[cfg(feature = "games")]
     let result = result.group(&crate::game::GAME_GROUP);
 
-    result.unrecognised_command(|ctx, msg, unrec| {
-        let url = match msg.content.split_whitespace().skip(1).next() {
-            Some(x) if x.starts_with("http") => x,
-            _ => {
-                info!("bad command formatting: '{}'", unrec);
-                let _ = ctx.send(msg.channel_id, "format your commands right. fuck you.", msg.tts);
-                return;
-            }
-        };
+    result
+        .help(&help::HELP)
+        .unrecognised_command(|ctx, msg, unrec| {
+            let url = match msg.content.split_whitespace().skip(1).next() {
+                Some(x) if x.starts_with("http") => x,
+                _ => {
+                    info!("bad command formatting: '{}'", unrec);
+                    let _ = ctx.send(msg.channel_id, "format your commands right. fuck you.", msg.tts);
+                    return;
+                }
+            };
 
-        let _ = self::playback::_play(ctx, msg, &url);
-    })
+            let _ = self::playback::_play(ctx, msg, &url);
+        })
 }
 
 

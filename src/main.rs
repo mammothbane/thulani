@@ -28,6 +28,7 @@ use log::{
     error,
     info,
     trace,
+    warn,
 };
 use serenity::{
     framework::StandardFramework,
@@ -132,7 +133,7 @@ fn run() -> Result<()> {
         .and_then(|f| serde_json::from_reader::<_, Vec<u64>>(f).map_err(Error::from));
 
     if let Err(ref e) = restrict_ids {
-        error!("opening restrict file: {}", e);
+        warn!("opening restrict file: {}", e);
     }
 
     let restrict_ids = restrict_ids
@@ -274,7 +275,6 @@ fn main() {
                     message
                 ))
             })
-
             .level(log::LevelFilter::Info)
             .level_for("thulani", log::LevelFilter::Trace)
             .chain(fern::log_file("thulani.log").expect("problem creating log file"))

@@ -57,6 +57,7 @@ group!({
         only_in: "guild",
     },
     commands: [
+        game,
         installedgame,
         ownedgame,
         updategaem,
