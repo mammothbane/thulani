@@ -63,17 +63,15 @@ pub fn addmeme(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
         return ctx.send(msg.channel_id, "hahAA it's empty xdddd", msg.tts);
     }
 
-    let image_id = image
-        .ok_or(anyhow!("no attachment"))
-        .and_then(|att| {
-            let data = att.download()?;
-            Image::create(&conn, &att.filename, data, msg.author.id.0)
-        })?;
+    let image_id = image.map(|att| {
+        let data = att.download()?;
+        Image::create(&conn, &att.filename, data, msg.author.id.0)
+    }).transpose()?;
 
     let save_result = NewMeme {
         title,
         content: text,
-        image_id: Some(image_id),
+        image_id,
         audio_id: None,
         metadata_id: 0,
     }.save(&conn, msg.author.id.0).map(|_| {});
