@@ -1,6 +1,7 @@
 defmodule Thulani.Bot.Application do
-  alias Thulani.Bot.Config
   use Application
+
+  alias Thulani.Bot.Config
 
   @applications [
     :nostrum
@@ -8,12 +9,12 @@ defmodule Thulani.Bot.Application do
 
   def start(_type, _args) do
     Config.init!()
+    Enum.each(@applications, fn a -> {:ok, _} = Application.ensure_all_started(a) end)
 
-    Enum.each(@applications, fn a -> Application.start(a) end)
+    children = [
+      Thulani.Bot.Supervisor
+    ]
 
-    children = []
-
-    opts = [strategy: :one_for_one, name: Thulani.Bot.Supervisor]
-    Supervisor.start_link(children, opts)
+    Supervisor.start_link(children, strategy: :one_for_one)
   end
 end
