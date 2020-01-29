@@ -1,4 +1,9 @@
 defmodule Thulani.Bot.Config do
+  # note: we actively don't want to use a config provider, since it only works in a release.
+  # we want to be able to *always* assume the config is going to be found in the environment and parse it
+  # ourselves. kind of sucks that we have to start all the applications we want to run ourselves, but that's just
+  # the way it has to be.
+
   @env_vars %{
     database_url: nil,
     spreadsheet_id: nil,

@@ -2,9 +2,14 @@ defmodule Thulani.Bot.Application do
   alias Thulani.Bot.Config
   use Application
 
+  @applications [
+    :nostrum
+  ]
+
   def start(_type, _args) do
     Config.init!()
-    Application.start(:nostrum)
+
+    Enum.each(@applications, fn a -> Application.start(a) end)
 
     children = []
 
