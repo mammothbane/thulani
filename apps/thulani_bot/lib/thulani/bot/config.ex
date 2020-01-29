@@ -11,7 +11,7 @@ defmodule Thulani.Bot.Config do
 
   require Logger
 
-  def init!() do
+  def init! do
     load_env()
     |> Enum.each(fn {application, vals} ->
       Enum.each(vals, fn {key, val} -> Application.put_env(application, key, val) end)
@@ -22,9 +22,7 @@ defmodule Thulani.Bot.Config do
     end
   end
 
-  def load_env() do
-    if Application.get_env(:thulani, :env) == :dev, do: load_dotenv()
-
+  def load_env do
     %{
       nostrum: [
         token: System.fetch_env!("THULANI_TOKEN"),
@@ -54,5 +52,4 @@ defmodule Thulani.Bot.Config do
       {env_var, value}
     end)
   end
-
 end

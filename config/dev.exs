@@ -6,9 +6,6 @@ config :logger,
 config :nostrum,
   dev: true
 
-IO.puts("hello")
+import_config "dotenv.exs"
 
-Thulani.Bot.Config.load_env()
-|> Enum.each(fn {key, vals} ->
-  config key, vals
-end)
+Thulani.Config.Dotenv.load_dotenv!()

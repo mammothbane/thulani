@@ -24,8 +24,7 @@ defmodule Thulani.Bot.MixProject do
 
   defp deps do
     [
-      # we look up the token based on an environment variable, so we can't do this
-      {:nostrum, "~> 0.4"},
+      {:nostrum, "~> 0.4", runtime: false},
       {:util, in_umbrella: true}
     ]
   end

@@ -4,6 +4,7 @@ defmodule Thulani.Bot.Application do
 
   def start(_type, _args) do
     Config.init!()
+    Application.start(:nostrum)
 
     children = []
 
