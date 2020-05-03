@@ -1,7 +1,9 @@
 /target/
 **/*.rs.bk
-.env
-.vscode
-*.log
-user_id_mapping.json
-restrict.json
+/.env
+/.vscode/
+/*.log
+/user_id_mapping.json
+/restrict.json
+/.stack-work/
+/out/

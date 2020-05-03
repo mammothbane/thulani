@@ -1,0 +1,26 @@
+{
+    "nixpkgs": {
+        "branch": "release-20.03",
+        "description": "A read-only mirror of NixOS/nixpkgs tracking the released channels. Send issues and PRs to",
+        "homepage": "https://github.com/NixOS/nixpkgs",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "9c4b22793ee2ff61615acf65f0903280c9b542f5",
+        "sha256": "0qjb6r7kgvidwh4ihn2qznf8rqvl2fzqbngzm5q2jniwa76yx2qi",
+        "type": "tarball",
+        "url": "https://github.com/NixOS/nixpkgs/archive/9c4b22793ee2ff61615acf65f0903280c9b542f5.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "nixpkgs-unstable": {
+        "branch": "master",
+        "description": "Nix Packages collection",
+        "homepage": null,
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "5dbc4f7fda6609d14a871e5dabb4c81c25cc9d91",
+        "sha256": "1f5dzmqmawwycd7fxdq38qc3md4cwchv1phhlzfar0gdalipf41a",
+        "type": "tarball",
+        "url": "https://github.com/nixos/nixpkgs/archive/5dbc4f7fda6609d14a871e5dabb4c81c25cc9d91.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    }
+}

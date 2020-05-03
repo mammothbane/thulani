@@ -1,0 +1,39 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 8464dad0cdc2e88c89e1d891319914d96a0815d686a3ae47c21c12f3e3413200
+
+name:           thulani
+version:        0.1.0
+homepage:       https://github.com/mammothbane/thulani#readme
+bug-reports:    https://github.com/mammothbane/thulani/issues
+author:         Nathan Perry <np@nathanperry.dev>
+maintainer:     Nathan Perry <np@nathanperry.dev>
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/mammothbane/thulani
+
+executable thulani
+  main-is: Main.hs
+  other-modules:
+      Config
+      Paths_thulani
+  hs-source-dirs:
+      src
+  default-extensions: OverloadedStrings
+  build-depends:
+      base
+    , containers
+    , discord-haskell
+    , dotenv
+    , envparse
+    , text
+    , url
+  default-language: Haskell2010

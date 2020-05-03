@@ -1,0 +1,22 @@
+spec-version: 0.30.0
+
+name: thulani
+version: 0.1.0
+author: Nathan Perry <np@nathanperry.dev>
+github: mammothbane/thulani
+
+default-extensions:
+  - OverloadedStrings
+
+executable:
+  main: Main.hs
+  source-dirs: src
+
+dependencies:
+  - base
+  - text
+  - containers
+  - envparse
+  - discord-haskell
+  - url
+  - dotenv
