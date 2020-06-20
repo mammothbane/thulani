@@ -7,8 +7,8 @@
 
 // trash dependencies that can't be fucked to upgrade to ed. 2018
 #[macro_use] extern crate diesel;
-#[macro_use] extern crate dotenv_codegen;
 #[macro_use] extern crate pest_derive;
+#[macro_use] extern crate envconfig_derive;
 
 use std::{
     default::Default,
@@ -33,17 +33,19 @@ use serenity::{
     framework::StandardFramework,
     model::{
         gateway::Ready,
-        id::{ChannelId, GuildId, MessageId, UserId},
+        id::{ChannelId, MessageId},
     },
     prelude::*,
 };
 
-use anyhow::anyhow;
-use dotenv::{dotenv, var as dvar};
+use dotenv::dotenv;
 use lazy_static::lazy_static;
+use envconfig::Envconfig;
 
 use self::commands::register_commands;
+
 pub use self::util::*;
+pub use self::config::*;
 
 #[cfg(feature = "diesel")]
 mod db;
@@ -64,22 +66,25 @@ mod game {
 mod commands;
 mod util;
 mod audio;
+mod config;
 
 pub type Error = anyhow::Error;
 
 pub type Result<T> = anyhow::Result<T>;
 
 lazy_static! {
-    static ref TARGET_GUILD: u64 = dotenv!("TARGET_GUILD").parse().expect("unable to parse TARGET_GUILD as u64");
-    static ref TARGET_GUILD_ID: GuildId = GuildId(*TARGET_GUILD);
-    static ref VOICE_CHANNEL_ID: ChannelId = ChannelId(must_env_lookup::<u64>("VOICE_CHANNEL"));
+    pub static ref CONFIG: Config = {
+        dotenv().ok();
+
+        Config::init().unwrap()
+    };
 }
 
 struct Handler;
 impl EventHandler for Handler {
     fn ready(&self, ctx: Context, r: Ready) {
         let guild = r.guilds.iter()
-            .find(|g| g.id().0 == *TARGET_GUILD);
+            .find(|g| g.id() == CONFIG.discord.guild());
 
         if guild.is_none() {
             info!("bot isn't in configured guild. join here: {:?}", OAUTH_URL.as_str());
@@ -114,7 +119,7 @@ lazy_static! {
 
 
 fn run() -> Result<()> {
-    let token = &dvar("THULANI_TOKEN").map_err(|_| anyhow!("missing token"))?;
+    let token = &CONFIG.discord.auth.token;
     let mut client = Client::new(token, Handler)?;
 
     audio::VoiceManager::register(&mut client);
@@ -140,7 +145,6 @@ fn run() -> Result<()> {
         .into_iter()
         .collect::<FnvHashSet<_>>();
 
-    let owner_id = must_env_lookup::<u64>("OWNER_ID");
     let mut framework = StandardFramework::new()
         .configure(|c| c
             .allow_dm(false)
@@ -148,17 +152,17 @@ fn run() -> Result<()> {
             .prefixes(all_prefixes)
             .ignore_bots(true)
             .on_mention(None)
-            .owners(vec![UserId(owner_id)].into_iter().collect())
+            .owners(vec![CONFIG.discord.owner()].into_iter().collect())
             .case_insensitivity(true)
         )
         .before(move |ctx, message, cmd| {
             debug!("got command '{}' from user '{}' ({})", cmd, message.author.name, message.author.id);
-            if !message.guild_id.map_or(false, |x| x.0 == *TARGET_GUILD) {
+            if !message.guild_id.map_or(false, |x| x == CONFIG.discord.guild()) {
                 info!("rejecting command '{}' from user '{}': wrong guild", cmd, message.author.name);
                 return false;
             }
 
-            if message.author.id.0 == owner_id {
+            if message.author.id == CONFIG.discord.owner() {
                 return true;
             }
 
@@ -238,8 +242,6 @@ fn main() {
     const MIN_RUN_DURATION: Duration = Duration::from_secs(120);
 
     info!("starting");
-
-    dotenv().ok();
 
     use fern::colors::{Color, ColoredLevelConfig};
     let colors = ColoredLevelConfig::new()

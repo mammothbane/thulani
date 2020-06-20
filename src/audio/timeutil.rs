@@ -50,6 +50,7 @@ pub fn parse_times<A: AsRef<str>>(s: A) -> (Option<Duration>, Option<Duration>) 
 #[cfg(test)]
 mod test {
     use time::Duration;
+    use itertools::iproduct;
 
     use super::*;
 

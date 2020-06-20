@@ -15,8 +15,8 @@ use serenity::{
 
 use crate::{
     Result,
+    CONFIG,
     audio::{PlayQueue, VoiceManager},
-    TARGET_GUILD_ID,
     util::CtxExt,
 };
 
@@ -27,7 +27,7 @@ pub fn mute(ctx: &mut Context, _: &Message, _: Args) -> Result<()> {
     let mgr_lock = ctx.data.write().get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 
-    manager.get_mut(*TARGET_GUILD_ID)
+    manager.get_mut(CONFIG.discord.guild())
         .map(|handler| {
             if handler.self_mute {
                 trace!("Already muted.")
@@ -45,7 +45,7 @@ pub fn unmute(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let mgr_lock = ctx.data.write().get::<VoiceManager>().cloned().unwrap();
     let mut manager = mgr_lock.lock();
 
-    manager.get_mut(*TARGET_GUILD_ID)
+    manager.get_mut(CONFIG.discord.guild())
         .map(|handler| {
             if !handler.self_mute {
                 trace!("Already unmuted.")

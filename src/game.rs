@@ -43,10 +43,9 @@ use anyhow::{
 use lazy_static::lazy_static;
 
 use crate::{
-    must_env_lookup,
     Result,
     util::CtxExt,
-    VOICE_CHANNEL_ID,
+    CONFIG,
 };
 
 pub use self::GAME_GROUP as GROUP;
@@ -65,15 +64,10 @@ group!({
 });
 
 lazy_static! {
-    static ref SHEETS_API_KEY: String = must_env_lookup("SHEETS_API_KEY");
-    static ref STEAM_API_KEY: String = must_env_lookup("STEAM_API_KEY");
-    static ref SPREADSHEET_ID: String = must_env_lookup("SPREADSHEET_ID");
-    static ref MAX_SHEET_COLUMN: String = must_env_lookup("MAX_SHEET_COLUMN");
-
     static ref SPREADSHEET_URL: Url = Url::parse(&format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchGet",
-        *SPREADSHEET_ID,
-    )).expect("prasing spreadsheet url");
+        &CONFIG.sheets.spreadsheet,
+    )).expect("parsing spreadsheet url");
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -285,12 +279,15 @@ fn _game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatu
             })
             .collect::<FnvHashMap<_, _>>();
 
-        let channel = pairs.get(&msg.author.id).unwrap_or(&*VOICE_CHANNEL_ID);
+        let channel = pairs
+            .get(&msg.author.id)
+            .cloned()
+            .unwrap_or(CONFIG.discord.voice_channel());
 
         users = pairs
             .iter()
             .filter_map(|(uid, cid)| {
-                if cid == channel {
+                if *cid == channel {
                     DISCORD_MAP.get(uid).map(|s| s.to_lowercase())
                 } else { None }
             })
@@ -384,10 +381,10 @@ fn load_spreadsheet() -> Result<Vec<Vec<String>>> {
     let mut u = SPREADSHEET_URL.clone();
 
     u.query_pairs_mut()
-        .append_pair("ranges", &format!("a1:{}", &*MAX_SHEET_COLUMN))
+        .append_pair("ranges", &format!("a1:{}", &CONFIG.sheets.max_column))
         .append_pair("valueRenderOption", "FORMATTED_VALUE")
         .append_pair("majorDimension", "COLUMNS")
-        .append_pair("key", &*SHEETS_API_KEY);
+        .append_pair("key", &CONFIG.sheets.api_key);
 
     let req = reqwest::Request::new(reqwest::Method::GET, u);
     let client = reqwest::Client::new();
@@ -482,7 +479,7 @@ pub fn updategaem(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()
     let mut u = Url::parse("https://api.steampowered.com/IPlayerService/GetOwnedGames/v1")?;
 
     u.query_pairs_mut()
-        .append_pair("key", &*STEAM_API_KEY)
+        .append_pair("key", &CONFIG.steam_api_key)
         .append_pair("include_played_free_games", "1")
         .append_pair("steamid", &steam_id.to_string());
 

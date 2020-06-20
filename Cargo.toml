@@ -17,7 +17,6 @@ log = "^0.4"
 typemap = "^0.3"
 url = "~1.7"
 dotenv = "^0.13"
-dotenv_codegen = "^0.11"
 chrono = "^0.4"
 time = "^0.1"
 fern = { version = "^0.5", features = ["colored"] }
@@ -38,6 +37,8 @@ pest = "~2.1"
 pest_derive = "~2.1"
 postgres = { version = "^0.15", optional = true, features = ["with-chrono"] }
 r2d2_postgres = { version = "^0.14", optional = true }
+envconfig = "^0.8"
+envconfig_derive = "^0.8"
 
 [dependencies.serenity]
 default-features = false

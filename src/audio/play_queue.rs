@@ -30,9 +30,8 @@ use crate::{
     commands::{
         sound_levels::DEFAULT_VOLUME,
     },
-    must_env_lookup,
     Result,
-    TARGET_GUILD_ID,
+    CONFIG,
 };
 
 const SECONDS_LEAD_TIME: f32 = 0.75;
@@ -115,7 +114,7 @@ impl PlayQueue {
                 queue.playing = None;
 
                 let mut manager = voice_manager.lock();
-                manager.leave(*TARGET_GUILD_ID);
+                manager.leave(CONFIG.discord.guild());
                 debug!("disconnected because playback finished");
             }
 
@@ -228,7 +227,7 @@ impl PlayQueue {
         };
 
         let mut manager = voice_manager.lock();
-        let handler = manager.join(*TARGET_GUILD_ID, must_env_lookup::<u64>("VOICE_CHANNEL"));
+        let handler = manager.join(CONFIG.discord.guild(), CONFIG.discord.voice_channel());
 
         match handler {
             Some(handler) => {

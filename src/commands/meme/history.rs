@@ -31,7 +31,7 @@ use crate::{
         Meme,
         Metadata,
     },
-    must_env_lookup,
+    CONFIG,
     Result,
     util::CtxExt,
 };
@@ -71,7 +71,7 @@ pub fn wat(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     match meme {
         Ok(ref meme) => {
             let metadata = Metadata::find(&conn, meme.metadata_id)?;
-            let author = crate::TARGET_GUILD_ID.member(&ctx, metadata.created_by as u64)?;
+            let author = CONFIG.discord.guild().member(&ctx, metadata.created_by as u64)?;
 
             ctx.send(msg.channel_id,
                  &format!("that was \"{}\" by {} ({})",
@@ -95,21 +95,16 @@ pub fn wat(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
 pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     use itertools::Itertools;
 
-    lazy_static! {
-        static ref MAX_HIST: usize = must_env_lookup("MAX_HIST");
-        static ref DEFAULT_HIST: usize = must_env_lookup("DEFAULT_HIST");
-    }
-
     let conn = connection()?;
 
-    let n = args.single_quoted::<usize>().unwrap_or(*DEFAULT_HIST);
+    let n = args.single_quoted::<usize>().unwrap_or(CONFIG.default_hist);
 
-    if n > *MAX_HIST {
-        debug!("user requested more than MAX_HIST ({}) items from history", *MAX_HIST);
+    if n > CONFIG.max_hist {
+        debug!("user requested more than MAX_HIST ({}) items from history", CONFIG.max_hist);
         ctx.send(msg.channel_id, "YER PUSHIN ME OVER THE FUCKIN LINE", true)?;
     }
 
-    let n = n.min(*MAX_HIST);
+    let n = n.min(CONFIG.max_hist);
 
     let records = InvocationRecord::last_n(&conn, n)?;
 
@@ -133,8 +128,8 @@ pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
                     Metadata::find(&conn, meme.metadata_id).map(|metadata| (metadata, meme))
                 })
                 .map(|(metadata, meme)| {
-                    let author_name = crate::TARGET_GUILD_ID.member(&ctx, metadata.created_by as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
-                    let invoker_name = crate::TARGET_GUILD_ID.member(&ctx, rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    let author_name = CONFIG.discord.guild().member(&ctx, metadata.created_by as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    let invoker_name = CONFIG.discord.guild().member(&ctx, rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
                     format!("{}. [{}{}] \"{}\" by {} ({}). invoked by {}.", i + 1, rand, ago, meme.title, author_name, metadata.created.date().format(CLEAN_DATE_FORMAT), invoker_name)
                 })
                 .unwrap_or_else(|e| {
@@ -144,7 +139,7 @@ pub fn history(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
                         }
                     }
 
-                    let invoker_name = crate::TARGET_GUILD_ID.member(&ctx, rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
+                    let invoker_name = CONFIG.discord.guild().member(&ctx, rec.user_id as u64).map(|m| m.display_name().into_owned()).unwrap_or("???".to_owned());
                     format!("{}. [{}{}] not found. invoked by {}.", i + 1, rand, ago, invoker_name)
                 })
         })
@@ -161,7 +156,6 @@ pub fn stats(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
         id::UserId,
         user::User,
     };
-    use crate::TARGET_GUILD_ID;
 
     let conn = connection()?;
     let stats = db::stats(&conn)?;
@@ -171,8 +165,8 @@ pub fn stats(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
     let rand_user: User = UserId(stats.most_random_meme_user).to_user(&ctx)?;
     let direct_user: User = UserId(stats.most_directly_named_meme_user).to_user(&ctx)?;
 
-    let rand_user = rand_user.nick_in(&ctx, *TARGET_GUILD_ID).unwrap_or(rand_user.name);
-    let direct_user = direct_user.nick_in(&ctx, *TARGET_GUILD_ID).unwrap_or(direct_user.name);
+    let rand_user = rand_user.nick_in(&ctx, CONFIG.discord.guild()).unwrap_or(rand_user.name);
+    let direct_user = direct_user.nick_in(&ctx, CONFIG.discord.guild()).unwrap_or(direct_user.name);
 
     let s = format!(
         r#"
@@ -224,13 +218,12 @@ pub fn memers(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
     use serenity::model::{
         id::UserId,
     };
-    use crate::TARGET_GUILD_ID;
 
     let s = db::memers()?
         .into_iter()
         .map(|info| {
             let user = UserId(info.user_id).to_user(&ctx)?;
-            let username = user.nick_in(&ctx, *TARGET_GUILD_ID).unwrap_or(user.name);
+            let username = user.nick_in(&ctx, CONFIG.discord.guild()).unwrap_or(user.name);
 
             let res = format!(
                 "**{}**: {} total, {} random, {} specific. favorite meme: *{}* ({})",
@@ -262,7 +255,7 @@ pub fn query(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     use crate::{
         game::get_user_id,
         db,
-        TARGET_GUILD_ID,
+        CONFIG,
     };
 
     lazy_static! {
@@ -310,7 +303,7 @@ pub fn query(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
         .into_iter()
         .map(|(meme, metadata)| {
             let user = UserId(metadata.created_by as u64).to_user(&ctx)?;
-            let username = user.nick_in(&ctx, *TARGET_GUILD_ID).unwrap_or(user.name);
+            let username = user.nick_in(&ctx, CONFIG.discord.guild()).unwrap_or(user.name);
 
             Ok(format!("*{}* by **{}** ({}). text length: **{}**, image: **{}**, audio: **{}**",
                        meme.title,

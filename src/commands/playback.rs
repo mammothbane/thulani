@@ -22,7 +22,7 @@ use crate::{
         VoiceManager,
     },
     Result,
-    TARGET_GUILD_ID,
+    CONFIG,
     util::CtxExt,
     commands::sound_levels::*,
 };
@@ -196,7 +196,7 @@ pub fn skip(ctx: &mut Context, _msg: &Message, _args: Args) -> Result<()> {
 
     let queue_lock = data.get::<PlayQueue>().cloned().unwrap();
 
-    if let Some(handler) = manager.get_mut(*TARGET_GUILD_ID) {
+    if let Some(handler) = manager.get_mut(CONFIG.discord.guild()) {
         handler.stop();
         let mut play_queue = queue_lock.write().unwrap();
         play_queue.playing = None;
@@ -226,7 +226,7 @@ pub fn die(ctx: &mut Context, msg: &Message, _: Args) -> Result<()> {
         play_queue.meme_queue.clear();
     }
 
-    if let Some(handler) = manager.get_mut(*TARGET_GUILD_ID) {
+    if let Some(handler) = manager.get_mut(CONFIG.discord.guild()) {
         info!("killing playback");
         handler.stop();
         handler.leave();

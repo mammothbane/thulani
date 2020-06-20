@@ -1,9 +1,3 @@
-use std::{
-    env,
-    str::FromStr,
-};
-
-use dotenv;
 use serenity::{
     client::Context,
     model::{
@@ -19,6 +13,7 @@ use url::Url;
 use lazy_static::lazy_static;
 
 use crate::{
+    CONFIG,
     audio::PlayQueue,
     Result,
 };
@@ -38,13 +33,12 @@ impl CtxExt for Context {
     }
 
     fn users_listening(&self) -> Result<bool> {
-        let channel_id = ChannelId(must_env_lookup::<u64>("VOICE_CHANNEL"));
-        let channel = channel_id.to_channel(self)?;
+        let channel = CONFIG.discord.voice_channel().to_channel(self)?;
         let res = channel.guild()
             .and_then(|ch| ch.read().guild(self))
             .map(|g| (&g.read().voice_states)
                 .into_iter()
-                .any(|(_, state)| state.channel_id == Some(channel_id)))
+                .any(|(_, state)| state.channel_id == Some(CONFIG.discord.voice_channel())))
             .unwrap_or(false);
 
         Ok(res)
@@ -81,12 +75,7 @@ lazy_static! {
     pub static ref OAUTH_URL: Url = Url::parse(
         &format!(
             "https://discordapp.com/api/oauth2/authorize?scope=bot&permissions={}&client_id={}",
-            REQUIRED_PERMS.bits(), dotenv!("THULANI_CLIENT_ID"),
+            REQUIRED_PERMS.bits(), CONFIG.discord.auth.client_id,
         )
     ).unwrap();
-}
-
-pub fn must_env_lookup<T: FromStr>(s: &str) -> T {
-    env::var(s).expect(&format!("missing env var {}", s))
-        .parse::<T>().unwrap_or_else(|_| panic!(format!("bad format for {}", s)))
 }
