@@ -150,7 +150,6 @@ fn run() -> Result<()> {
             .on_mention(None)
             .owners(vec![UserId(owner_id)].into_iter().collect())
             .case_insensitivity(true)
-            .delimiter("\t")
         )
         .before(move |ctx, message, cmd| {
             debug!("got command '{}' from user '{}' ({})", cmd, message.author.name, message.author.id);

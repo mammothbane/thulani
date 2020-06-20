@@ -10,7 +10,7 @@ db = ["diesel", "postgres", "r2d2_postgres"]
 games = []
 
 [dependencies]
-lazy_static = "~1.3"
+lazy_static = "~1.4"
 anyhow = "^1.0"
 thiserror = "^1.0"
 log = "^0.4"

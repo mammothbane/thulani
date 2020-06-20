@@ -45,7 +45,6 @@ use lazy_static::lazy_static;
 use crate::{
     must_env_lookup,
     Result,
-    Error,
     util::CtxExt,
     VOICE_CHANNEL_ID,
 };
@@ -70,6 +69,11 @@ lazy_static! {
     static ref STEAM_API_KEY: String = must_env_lookup("STEAM_API_KEY");
     static ref SPREADSHEET_ID: String = must_env_lookup("SPREADSHEET_ID");
     static ref MAX_SHEET_COLUMN: String = must_env_lookup("MAX_SHEET_COLUMN");
+
+    static ref SPREADSHEET_URL: Url = Url::parse(&format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchGet",
+        *SPREADSHEET_ID,
+    )).expect("prasing spreadsheet url");
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -377,8 +381,7 @@ fn _game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatu
 }
 
 fn load_spreadsheet() -> Result<Vec<Vec<String>>> {
-    let mut u = Url::parse(
-        &format!("https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchGet", *SPREADSHEET_ID))?;
+    let mut u = SPREADSHEET_URL.clone();
 
     u.query_pairs_mut()
         .append_pair("ranges", &format!("a1:{}", &*MAX_SHEET_COLUMN))
