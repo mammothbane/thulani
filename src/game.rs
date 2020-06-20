@@ -45,6 +45,7 @@ use lazy_static::lazy_static;
 use crate::{
     must_env_lookup,
     Result,
+    Error,
     util::CtxExt,
     VOICE_CHANNEL_ID,
 };
