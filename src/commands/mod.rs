@@ -16,6 +16,7 @@ pub use self::{
     playback::*,
     sound_levels::*,
     roll::{roll, ROLL_COMMAND},
+    today::{today, TODAY_COMMAND},
 };
 #[cfg(feature = "diesel")]
 pub use self::meme::*;
@@ -23,8 +24,9 @@ pub use self::meme::*;
 pub(crate) mod playback;
 pub(crate) mod sound_levels;
 pub(crate) mod roll;
-mod help;
+pub(crate) mod today;
 
+mod help;
 
 group!({
     name: "general",
@@ -33,6 +35,7 @@ group!({
     },
     commands: [
         roll,
+        today,
     ],
 });
 
