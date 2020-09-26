@@ -37,8 +37,9 @@ mod france;
 mod shrek;
 
 mod wednesday;
-
 mod tomorrow;
+
+mod pianoman;
 
 pub type TodayIter = Box<dyn Iterator<Item=TodayArgs>>;
 
@@ -74,8 +75,9 @@ lazy_static! {
         shrek::shrek,
 
         wednesday::wednesday,
-
         tomorrow::tomorrow,
+
+        pianoman::pianoman,
     ];
 }
 
