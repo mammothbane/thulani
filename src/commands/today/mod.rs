@@ -64,7 +64,7 @@ impl TodayArgs {
 
 
 lazy_static! {
-    static ref ALL: Vec<fn(chrono::NaiveDate) -> TodayIter> = vec! [
+    static ref ALL: Vec<fn(chrono::NaiveDateTime) -> TodayIter> = vec! [
         sept_21::sept_21,
         nov_5::nov_5,
 
@@ -84,16 +84,25 @@ lazy_static! {
 pub fn today(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
     let today = {
         #[allow(unused_mut)]
-        let mut result = chrono::Local::today().naive_local();
+        let mut result = chrono::Local::now().naive_local();
 
         #[cfg(debug_assertions)] {
-            match _args.parse::<chrono::NaiveDate>() {
-                Ok(date) => {
-                    log::debug!("overriding with date: {}", date);
-                    result = date;
+            let dt = _args.parse::<chrono::NaiveDateTime>()
+                .or_else(|_| {
+                    _args.parse::<chrono::NaiveDate>()
+                        .map(|date| {
+                            let time = chrono::NaiveTime::from_hms(12, 0, 0);
+                            date.and_time(time)
+                        })
+                });
+
+            match dt {
+                Ok(dt) => {
+                    log::debug!("overriding with datetime: {}", dt);
+                    result = dt;
                 },
                 Err(e) => {
-                    log::debug!("parsing date: {:?}", e);
+                    log::debug!("parsing datetime: {:?}", e);
                 }
             };
         }

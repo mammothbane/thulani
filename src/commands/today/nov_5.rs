@@ -1,6 +1,6 @@
 use super::prelude::*;
 
-pub fn nov_5(date: chrono::NaiveDate) -> TodayIter {
+pub fn nov_5(date: chrono::NaiveDateTime) -> TodayIter {
     if (11, 5) != month_day(date) {
         return Box::new(empty());
     }

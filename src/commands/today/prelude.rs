@@ -17,7 +17,7 @@ pub use super::{
 
 
 #[inline]
-pub fn month_day(date: chrono::NaiveDate) -> (u32, u32) {
+pub fn month_day(date: chrono::NaiveDateTime) -> (u32, u32) {
     (date.month(), date.day())
 }
 

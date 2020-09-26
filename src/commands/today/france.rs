@@ -1,6 +1,6 @@
 use super::prelude::*;
 
-pub fn france(date: chrono::NaiveDate) -> TodayIter {
+pub fn france(date: chrono::NaiveDateTime) -> TodayIter {
     let ok = match month_day(date) {
         // bastille day
         (7, 14) => true,

@@ -1,6 +1,6 @@
 use super::prelude::*;
 
-pub fn ussr(date: chrono::NaiveDate) -> TodayIter {
+pub fn ussr(date: chrono::NaiveDateTime) -> TodayIter {
     let ok = match month_day(date) {
         // red army day
         (2, 23) => true,

@@ -32,8 +32,8 @@ lazy_static! {
     ];
 }
 
-pub fn sept_21(date: chrono::NaiveDate) -> TodayIter {
-    if (9, 21) != (date.month(), date.day()) {
+pub fn sept_21(date: chrono::NaiveDateTime) -> TodayIter {
+    if (9, 21) != month_day(date) {
         return Box::new(empty());
     }
 

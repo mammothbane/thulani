@@ -9,7 +9,7 @@ lazy_static! {
     ];
 }
 
-pub fn halloween(date: chrono::NaiveDate) -> TodayIter {
+pub fn halloween(date: chrono::NaiveDateTime) -> TodayIter {
     if (10, 31) != month_day(date) {
         return Box::new(empty());
     }

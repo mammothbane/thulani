@@ -1,6 +1,6 @@
 use super::prelude::*;
 
-pub fn wednesday(date: chrono::NaiveDate) -> TodayIter {
+pub fn wednesday(date: chrono::NaiveDateTime) -> TodayIter {
     if date.weekday() != chrono::Weekday::Wed {
         return Box::new(empty());
     }

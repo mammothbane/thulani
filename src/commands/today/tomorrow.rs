@@ -1,6 +1,6 @@
 use super::prelude::*;
 
-pub fn tomorrow(_date: chrono::NaiveDate) -> TodayIter {
+pub fn tomorrow(_date: chrono::NaiveDateTime) -> TodayIter {
     Box::new(
         once(
             TodayArgs {
