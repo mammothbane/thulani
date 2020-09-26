@@ -33,6 +33,8 @@ mod nov_5;
 
 mod halloween;
 mod ussr;
+mod france;
+mod shrek;
 
 mod wednesday;
 
@@ -68,6 +70,8 @@ lazy_static! {
 
         halloween::halloween,
         ussr::ussr,
+        france::france,
+        shrek::shrek,
 
         wednesday::wednesday,
 
@@ -100,12 +104,16 @@ pub fn today(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
         .flat_map(|f| f(today))
         .collect();
 
-    debug!("selected {} options for {}", options.len(), today);
+    debug!("{} options for {}", options.len(), today);
 
     let play_args = options.choose(&mut thread_rng())
         .map(|x| x.as_play_args(msg));
 
     if let Some(play_args) = play_args {
+        play_args.data.as_ref().left().iter().for_each(|url| {
+            debug!("today selected: {}", url);
+        });
+
         let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
         let mut play_queue = queue_lock.write().unwrap();
 
