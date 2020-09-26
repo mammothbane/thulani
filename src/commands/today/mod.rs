@@ -81,12 +81,13 @@ lazy_static! {
 
 
 #[command]
-pub fn today(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
+pub fn today(ctx: &mut Context, msg: &Message, _args: Args) -> Result<()> {
     let today = {
+        #[allow(unused_mut)]
         let mut result = chrono::Local::today().naive_local();
 
         #[cfg(debug_assertions)] {
-            match args.parse::<chrono::NaiveDate>() {
+            match _args.parse::<chrono::NaiveDate>() {
                 Ok(date) => {
                     log::debug!("overriding with date: {}", date);
                     result = date;
