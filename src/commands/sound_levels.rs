@@ -20,7 +20,8 @@ use crate::{
     util::CtxExt,
 };
 
-pub const DEFAULT_VOLUME: f32 = 0.10;
+pub const DEFAULT_VOLUME: f32 = 0.20;
+const MAX_VOLUME: f32 = 5.0;
 
 #[command]
 pub fn mute(ctx: &mut Context, _: &Message, _: Args) -> Result<()> {
@@ -86,15 +87,11 @@ pub fn volume(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()> {
     };
 
     let mut vol: f32 = (vol as f32)/100.0;  // force aliasing to reasonable values
-    let adjusted_text = if vol > 3.0 { " (300% max)" } else { "" };
+    let adjusted_text = if vol > MAX_VOLUME {
+        format!(" ({:.0}% max)", MAX_VOLUME * 100.0)
+    } else { "".to_owned() };
 
-    if vol > 3.0 {
-        vol = 3.0;
-    }
-
-    if vol < 0.0 {
-        vol = 0.0;
-    }
+    vol = vol.clamp(0.0, MAX_VOLUME);
 
     let queue_lock = ctx.data.write().get::<PlayQueue>().cloned().unwrap();
 

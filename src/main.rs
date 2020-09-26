@@ -2,6 +2,7 @@
 #![feature(pattern)]
 #![feature(concat_idents)]
 #![feature(associated_type_defaults)]
+#![feature(clamp)]
 
 #![feature(box_syntax, box_patterns)]
 
