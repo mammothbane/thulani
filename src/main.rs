@@ -53,15 +53,13 @@ mod bot;
 pub type Error = anyhow::Error;
 pub type Result<T> = anyhow::Result<T>;
 
+const BACKOFF_FACTOR: f64 = 2.0;
+const MAX_BACKOFFS: usize = 3;
+const BACKOFF_INIT: f64 = 100.0;
+
+const MIN_RUN_DURATION: Duration = Duration::from_secs(120);
+
 fn main() {
-    const BACKOFF_FACTOR: f64 = 2.0;
-    const MAX_BACKOFFS: usize = 3;
-    const BACKOFF_INIT: f64 = 100.0;
-
-    const MIN_RUN_DURATION: Duration = Duration::from_secs(120);
-
-    info!("starting");
-
     log_setup::init().expect("initializing logging");
 
     let mut backoff_count: usize = 0;
