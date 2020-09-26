@@ -8,9 +8,10 @@ use serenity::{
         permissions::Permissions,
     }
 };
-use url::Url;
 
+use url::Url;
 use lazy_static::lazy_static;
+use log::debug;
 
 use crate::{
     CONFIG,
@@ -52,8 +53,8 @@ impl CtxExt for Context {
     #[inline]
     fn send_result<A: AsRef<str>>(&self, channel: ChannelId, text: A, tts: bool) -> Result<MessageId> {
         let text = text.as_ref();
-        debug!("sending message {:?} to channel {:?}", text, channel);
-        let result = channel.send_message(self, |m| m.content(text.as_ref()).tts(tts))?;
+        debug!("sending message {:?} to channel {:?} (tts: {})", text, channel, tts);
+        let result = channel.send_message(self, |m| m.content(text).tts(tts))?;
         Ok(result.id)
     }
 }

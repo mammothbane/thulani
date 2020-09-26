@@ -6,7 +6,17 @@ use serenity::{
     },
 };
 
+use dotenv::dotenv;
+use lazy_static::lazy_static;
 use envconfig::Envconfig;
+
+lazy_static! {
+    pub static ref CONFIG: Config = {
+        dotenv().ok();
+
+        Config::init().unwrap()
+    };
+}
 
 #[derive(Envconfig)]
 pub struct Config {
