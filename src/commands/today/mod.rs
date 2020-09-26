@@ -32,6 +32,7 @@ mod sept_21;
 mod nov_5;
 
 mod halloween;
+mod ussr;
 
 mod wednesday;
 
@@ -66,6 +67,7 @@ lazy_static! {
         nov_5::nov_5,
 
         halloween::halloween,
+        ussr::ussr,
 
         wednesday::wednesday,
 
