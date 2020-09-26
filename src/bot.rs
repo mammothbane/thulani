@@ -13,6 +13,7 @@ use serenity::{
             MessageId,
         },
         channel::Message,
+        event::ResumedEvent,
     },
     framework::StandardFramework,
 };
@@ -22,6 +23,7 @@ use fnv::{
     FnvHashSet,
 };
 
+use serde_json::Value;
 use chrono::Datelike;
 use lazy_static::lazy_static;
 use log::{
@@ -50,7 +52,10 @@ impl EventHandler for Handler {
 
         if guild.is_none() {
             info!("bot isn't in configured guild. join here: {:?}", OAUTH_URL.as_str());
+            return;
         }
+
+        info!("connected");
 
         #[cfg(debug_assertions)]
         let botname = "thulani (dev)";
@@ -65,10 +70,18 @@ impl EventHandler for Handler {
         });
     }
 
+    fn resume(&self, _ctx: Context, _resume: ResumedEvent) {
+        info!("reconnected to discord");
+    }
+
     fn message_delete(&self, _ctx: Context, _channel_id: ChannelId, deleted_message_id: MessageId) {
         MESSAGE_WATCH.lock()
             .unwrap()
             .remove(&deleted_message_id);
+    }
+
+    fn unknown(&self, _ctx: Context, name: String, _raw: Value) {
+        info!("unknown event: {:?}", name);
     }
 }
 
