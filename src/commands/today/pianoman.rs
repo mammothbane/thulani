@@ -1,7 +1,8 @@
 use super::prelude::*;
 
 lazy_static! {
-    static ref TARGET_TIME: chrono::NaiveTime = chrono::NaiveTime::from_hms(21, 0, 0);
+    static ref NINE_AM: chrono::NaiveTime = chrono::NaiveTime::from_hms(9, 0, 0);
+    static ref NINE_PM: chrono::NaiveTime = chrono::NaiveTime::from_hms(21, 0, 0);
 
     static ref PIANOMANS: Vec<TodayArgs> = vec![
         by_url("https://www.youtube.com/watch?v=gxEPV4kolz0"),
@@ -18,18 +19,20 @@ pub fn pianoman(dt: chrono::NaiveDateTime) -> TodayIter {
         return Box::new(empty());
     }
 
-    let diff = {
-        let result = *TARGET_TIME - dt.time();
-        if result < chrono::Duration::zero() {
-            -result
-        } else {
-            result
-        }
-    };
+    let near_9am = duration_abs(*NINE_AM - dt.time()) <= Duration::minutes(5);
+    let near_9pm = duration_abs(*NINE_PM - dt.time()) <= Duration::minutes(5);
 
-    if diff > Duration::minutes(5) {
+    if !near_9am && !near_9pm {
         return Box::new(empty());
     }
 
     Box::new(PIANOMANS.iter().cloned())
+}
+
+fn duration_abs(d: Duration) -> Duration {
+    if d < chrono::Duration::zero() {
+        -d
+    } else {
+        d
+    }
 }
