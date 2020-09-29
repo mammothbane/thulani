@@ -74,6 +74,7 @@ lazy_static! {
         ussr::ussr,
         france::france,
         shrek::shrek,
+        putin::putin,
 
         wednesday::wednesday,
         tomorrow::tomorrow,

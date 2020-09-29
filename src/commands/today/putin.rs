@@ -1,6 +1,6 @@
 use super::prelude::*;
 
-pub fn shrek(date: chrono::NaiveDateTime) -> TodayIter {
+pub fn putin(date: chrono::NaiveDateTime) -> TodayIter {
     if month_day(date) != (10, 7) {
         return Box::new(empty());
     }
