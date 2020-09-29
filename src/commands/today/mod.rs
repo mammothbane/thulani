@@ -35,6 +35,7 @@ mod halloween;
 mod ussr;
 mod france;
 mod shrek;
+mod putin;
 
 mod wednesday;
 mod tomorrow;
