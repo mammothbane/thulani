@@ -38,6 +38,7 @@ mod shrek;
 mod putin;
 
 mod wednesday;
+mod thursday;
 mod tomorrow;
 
 mod pianoman;
@@ -77,6 +78,7 @@ lazy_static! {
         putin::putin,
 
         wednesday::wednesday,
+        thursday::thursday,
         tomorrow::tomorrow,
 
         pianoman::pianoman,
