@@ -23,10 +23,6 @@
     ...
   } @ inputs: (flake-utils.lib.eachDefaultSystem (system:
     let
-      barepkgs = import nixpkgs {
-        inherit system;
-      };
-
       pkgs = import nixpkgs {
         inherit system;
 
@@ -61,13 +57,15 @@
         postgresql
       ];
 
+      inherit (pkgs) lib;
+
       pkg = naersk.buildPackage {
         pname = "thulani";
         version = self.rev or "dirty";
 
-        src = pkgs.lib.cleanSource ./.;
+        src = lib.cleanSource ./.;
 
-        buildInputs = deps;
+        nativeBuildInputs = deps;
         remapPathPrefix = true;
       };
 
@@ -77,10 +75,7 @@
           cargo
           rustc
 
-          barepkgs.rustracer
-          # (rustracer.overrideAttrs (old: {
-            # dontCheck = true;
-          # }))
+          rustracer
         ]) ++ deps;
 
         RUST_SRC_PATH = "${pkgs.naerskRust}/lib/rustlib/src/rust";
