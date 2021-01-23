@@ -1,5 +1,6 @@
 use std::{
     convert::Infallible,
+    fs,
     iter,
     result::Result as StdResult,
     str::{
@@ -18,14 +19,15 @@ use log::{
     error,
     info,
 };
-use serde::{
-    Deserialize,
-};
+use serde::Deserialize;
 use serenity::{
     framework::standard::{
+        macros::{
+            command,
+            group,
+        },
         ArgError,
         Args,
-        macros::{command, group},
     },
     model::{
         channel::Message,
@@ -43,8 +45,8 @@ use anyhow::{
 use lazy_static::lazy_static;
 
 use crate::{
-    Result,
     util::CtxExt,
+    Result,
     CONFIG,
 };
 
@@ -67,7 +69,8 @@ lazy_static! {
     static ref SPREADSHEET_URL: Url = Url::parse(&format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchGet",
         &CONFIG.sheets.spreadsheet,
-    )).expect("parsing spreadsheet url");
+    ))
+    .expect("parsing spreadsheet url");
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -88,36 +91,35 @@ struct ProfileInfo {
 }
 
 lazy_static! {
-    static ref USER_MAP_STR: &'static str = str::from_utf8(&include_bytes!("../user_id_mapping.json")[..]).unwrap();
-
+    static ref USER_MAP_STR: String = fs::read_to_string("user_id_mapping.json").unwrap();
     static ref USER_INFO_MAP: FnvHashMap<String, ProfileInfo> = {
-        let v: Vec<UserInfo> = serde_json::from_str(*USER_MAP_STR).unwrap();
+        let v: Vec<UserInfo> = serde_json::from_str(&USER_MAP_STR).unwrap();
 
         v.into_iter()
             .map(|ui| {
-                let UserInfo { name, profile } = ui;
+                let UserInfo {
+                    name,
+                    profile,
+                } = ui;
 
                 (name, profile)
             })
             .collect::<FnvHashMap<_, _>>()
     };
-
     static ref DISCORD_MAP: FnvHashMap<UserId, String> = {
-        USER_INFO_MAP.clone().into_iter()
-            .map(|(name, profile)| {
-                (UserId(profile.discord_user_id), name)
-            })
+        USER_INFO_MAP
+            .clone()
+            .into_iter()
+            .map(|(name, profile)| (UserId(profile.discord_user_id), name))
             .collect::<FnvHashMap<_, _>>()
     };
-
     static ref STEAM_MAP: FnvHashMap<UserId, u64> = {
-        USER_INFO_MAP.clone().into_iter()
-            .filter_map(|(_, profile)| {
-                profile.steam_id.map(|sid| (UserId(profile.discord_user_id), sid))
-            })
+        USER_INFO_MAP
+            .clone()
+            .into_iter()
+            .filter_map(|(_, profile)| profile.steam_id.map(|sid| (UserId(profile.discord_user_id), sid)))
             .collect::<FnvHashMap<_, _>>()
     };
-
     static ref ALPHABET: Vec<char> = (0..26).map(|x| (x + b'a') as char).collect();
 }
 
@@ -180,9 +182,7 @@ pub fn get_user_id<S: AsRef<str>>(g: &Guild, s: S) -> StdResult<UserId, UserLook
     let nicks = g.members_nick_containing(&s, false, false);
 
     {
-        let exact_match = nicks
-            .iter()
-            .find(|m| m.user.read().name.to_lowercase() == s);
+        let exact_match = nicks.iter().find(|m| m.user.read().name.to_lowercase() == s);
 
         if let Some(m) = exact_match {
             return Ok(m.user_id());
@@ -192,23 +192,19 @@ pub fn get_user_id<S: AsRef<str>>(g: &Guild, s: S) -> StdResult<UserId, UserLook
     let usernames = g.members_username_containing(&s, false, false);
 
     {
-        let exact_match = usernames
-            .iter()
-            .find(|m| m.user.read().name.to_lowercase() == s);
+        let exact_match = usernames.iter().find(|m| m.user.read().name.to_lowercase() == s);
 
         if let Some(m) = exact_match {
             return Ok(m.user_id());
         }
     }
 
-    let opts = nicks.into_iter().chain(usernames.into_iter())
-        .map(|member| member.user_id())
-        .collect::<FnvHashSet<_>>();
+    let opts = nicks.into_iter().chain(usernames.into_iter()).map(|member| member.user_id()).collect::<FnvHashSet<_>>();
 
     match opts.len() {
         0 => Err(UserLookupError::NotFound),
         1 => Ok(opts.into_iter().next().unwrap()),
-        x => Err(UserLookupError::Ambiguous(x))
+        x => Err(UserLookupError::Ambiguous(x)),
     }
 }
 
@@ -219,16 +215,11 @@ fn game(ctx: &mut Context, msg: &Message, args: Args) -> Result<()> {
 }
 
 fn _game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatus) -> Result<()> {
-    let guild = msg.channel_id.to_channel(&ctx)?
-        .guild()
-        .ok_or(anyhow!("couldn't find guild"))?;
+    let guild = msg.channel_id.to_channel(&ctx)?.guild().ok_or(anyhow!("couldn't find guild"))?;
 
-    let guild = guild.read()
-        .guild(&ctx)
-        .ok_or(anyhow!("couldn't find guild"))?;
+    let guild = guild.read().guild(&ctx).ok_or(anyhow!("couldn't find guild"))?;
 
-    let guild = guild
-        .read();
+    let guild = guild.read();
 
     let user_args: Vec<String> = if args.rest().is_empty() {
         Vec::new()
@@ -274,22 +265,19 @@ fn _game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatu
         let pairs = guild
             .voice_states
             .iter()
-            .filter_map(|(uid, voice)| {
-                voice.channel_id.map(|cid| (*uid, cid))
-            })
+            .filter_map(|(uid, voice)| voice.channel_id.map(|cid| (*uid, cid)))
             .collect::<FnvHashMap<_, _>>();
 
-        let channel = pairs
-            .get(&msg.author.id)
-            .cloned()
-            .unwrap_or(CONFIG.discord.voice_channel());
+        let channel = pairs.get(&msg.author.id).cloned().unwrap_or(CONFIG.discord.voice_channel());
 
         users = pairs
             .iter()
             .filter_map(|(uid, cid)| {
                 if *cid == channel {
                     DISCORD_MAP.get(uid).map(|s| s.to_lowercase())
-                } else { None }
+                } else {
+                    None
+                }
             })
             .collect::<FnvHashSet<_>>();
     }
@@ -308,7 +296,9 @@ fn _game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatu
 
             if users.contains(&user) {
                 Some((user, i))
-            } else { None }
+            } else {
+                None
+            }
         })
         .collect::<FnvHashMap<_, _>>();
 
@@ -318,22 +308,21 @@ fn _game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatu
         .map(|(user, col)| {
             let empty_hash_set: FnvHashSet<_> = vec![].into_iter().collect();
 
-            let mut game_map = vec! [
+            let mut game_map = vec![
                 (GameStatus::Installed, empty_hash_set.clone()),
                 (GameStatus::NotInstalled, empty_hash_set.clone()),
                 (GameStatus::NotOwned, empty_hash_set.clone()),
                 (GameStatus::Unknown, empty_hash_set),
             ]
-                .into_iter()
-                .collect::<FnvHashMap<_, _>>();
+            .into_iter()
+            .collect::<FnvHashMap<_, _>>();
 
-            (1..data[*col].len())
-                .for_each(|i| {
-                    let status = &data_ref[*col][i].parse::<GameStatus>().unwrap_or(GameStatus::Unknown);
-                    let game = &data_ref[0][i];
+            (1..data[*col].len()).for_each(|i| {
+                let status = &data_ref[*col][i].parse::<GameStatus>().unwrap_or(GameStatus::Unknown);
+                let game = &data_ref[0][i];
 
-                    game_map.get_mut(status).unwrap().insert(game);
-                });
+                game_map.get_mut(status).unwrap().insert(game);
+            });
 
             (user, game_map)
         })
@@ -349,24 +338,19 @@ fn _game(ctx: &mut Context, msg: &Message, mut args: Args, min_status: GameStatu
 
         statuses
             .iter()
-            .fold(iter::empty().collect::<FnvHashSet<_>>(), |acc, s| {
-                acc.union(&game_map[s]).cloned().collect()
-            })
+            .fold(iter::empty().collect::<FnvHashSet<_>>(), |acc, s| acc.union(&game_map[s]).cloned().collect())
     };
 
     for (_user, game_map) in user_games.iter() {
         let relevant_games = statuses
             .iter()
-            .fold(iter::empty().collect::<FnvHashSet<_>>(), |acc, s| {
-                acc.union(&game_map[s]).cloned().collect()
-            });
+            .fold(iter::empty().collect::<FnvHashSet<_>>(), |acc, s| acc.union(&game_map[s]).cloned().collect());
 
         games_in_common = games_in_common.intersection(&relevant_games).cloned().collect();
     }
 
-    let mut games_formatted = games_in_common.iter().sorted_by(|a, b| {
-        a.to_lowercase().cmp(&b.to_lowercase())
-    }).join("\n");
+    let mut games_formatted =
+        games_in_common.iter().sorted_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase())).join("\n");
 
     if games_formatted.is_empty() {
         games_formatted = "**LITERALLY NOTHING**".to_owned();
@@ -418,16 +402,11 @@ pub fn updategaem(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()
     } else {
         use std::borrow::Borrow;
 
-        let guild = msg.channel_id.to_channel(&ctx)?
-            .guild()
-            .ok_or(anyhow!("couldn't find guild"))?;
+        let guild = msg.channel_id.to_channel(&ctx)?.guild().ok_or(anyhow!("couldn't find guild"))?;
 
-        let guild = guild.read()
-            .guild(&ctx)
-            .ok_or(anyhow!("couldn't find guild"))?;
+        let guild = guild.read().guild(&ctx).ok_or(anyhow!("couldn't find guild"))?;
 
-        let guild = guild
-            .read();
+        let guild = guild.read();
 
         get_user_id(guild.borrow(), arg_user.unwrap()).map_err(Error::from)?
     };
@@ -446,8 +425,7 @@ pub fn updategaem(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()
 
     let spreadsheet = load_spreadsheet()?;
 
-    let user_column = (0..spreadsheet.len())
-        .find(|x| spreadsheet[*x][0].to_lowercase() == username.to_lowercase());
+    let user_column = (0..spreadsheet.len()).find(|x| spreadsheet[*x][0].to_lowercase() == username.to_lowercase());
 
     let user_column = match user_column {
         Some(c) => &spreadsheet[c][1..],
@@ -458,23 +436,20 @@ pub fn updategaem(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()
         static ref APPID_REGEX: Regex = Regex::new(r#"(?i)^\s*app\s*id\s*$"#).unwrap();
     }
 
-    let appid_column = (0..spreadsheet.len())
-        .find(|x| APPID_REGEX.is_match(&spreadsheet[*x][0]));
+    let appid_column = (0..spreadsheet.len()).find(|x| APPID_REGEX.is_match(&spreadsheet[*x][0]));
 
     let appid_column = match appid_column {
         Some(c) => &spreadsheet[c][1..],
         None => {
             error!("didn't find an appid column in the spreadsheet");
-            return ctx.send(msg.channel_id, "SPREADSHEET BROKE", msg.tts)
+            return ctx.send(msg.channel_id, "SPREADSHEET BROKE", msg.tts);
         },
     };
 
     let missing_appids = (0..user_column.len())
         .filter_map(|x| user_column[x].parse::<GameStatus>().ok().map(|s| (x, s)))
         .filter(|(_, s)| *s == GameStatus::Unknown || *s == GameStatus::NotOwned)
-        .filter_map(|(x, _)| appid_column
-            .get(x)
-            .and_then(|s| s.parse::<u64>().ok().map(|appid| (appid, x))));
+        .filter_map(|(x, _)| appid_column.get(x).and_then(|s| s.parse::<u64>().ok().map(|appid| (appid, x))));
 
     let mut u = Url::parse("https://api.steampowered.com/IPlayerService/GetOwnedGames/v1")?;
 
@@ -502,25 +477,29 @@ pub fn updategaem(ctx: &mut Context, msg: &Message, mut args: Args) -> Result<()
         play_time: u64,
     }
 
-    let games_owned= reqwest::get(u)?
-        .json::<SteamResp>()?
-        .response.games
-        .into_iter()
-        .map(|ge| ge.app_id)
-        .collect::<FnvHashSet<_>>();
+    let games_owned =
+        reqwest::get(u)?.json::<SteamResp>()?.response.games.into_iter().map(|ge| ge.app_id).collect::<FnvHashSet<_>>();
 
     let found_games = missing_appids
-        .filter_map(|(ai, x)| if games_owned.contains(&ai) {
-            Some(&spreadsheet[0][x + 1])
-        } else {
-            None
+        .filter_map(|(ai, x)| {
+            if games_owned.contains(&ai) {
+                Some(&spreadsheet[0][x + 1])
+            } else {
+                None
+            }
         })
         .join("\n");
 
     if found_games.len() > 0 {
-        ctx.send(msg.channel_id, &format!("{} games owned on steam that are missing from the list:\n{}",
-                                      found_games.chars().filter(|x| *x == '\n').count() + 1,
-                                      found_games), msg.tts)
+        ctx.send(
+            msg.channel_id,
+            &format!(
+                "{} games owned on steam that are missing from the list:\n{}",
+                found_games.chars().filter(|x| *x == '\n').count() + 1,
+                found_games
+            ),
+            msg.tts,
+        )
     } else {
         ctx.send(msg.channel_id, "up to date", msg.tts)
     }

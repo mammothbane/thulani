@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/master";
+    nixpkgs.url = "github:nixos/nixpkgs/release-20.09";
     flake-utils.url = "github:numtide/flake-utils";
 
     nixpkgs-mozilla = {
@@ -8,7 +8,10 @@
       flake = false;
     };
 
-    naersk.url = "github:nmattia/naersk";
+    naersk = {
+      url = "github:nmattia/naersk";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   description = "thulani discord bot";
@@ -20,6 +23,10 @@
     ...
   } @ inputs: (flake-utils.lib.eachDefaultSystem (system:
     let
+      barepkgs = import nixpkgs {
+        inherit system;
+      };
+
       pkgs = import nixpkgs {
         inherit system;
 
@@ -37,6 +44,8 @@
           in {
             cargo = rust;
             rustc = rust;
+
+            naerskRust = rust;
           })
         ];
       };
@@ -67,7 +76,14 @@
         buildInputs = (with pkgs; [
           cargo
           rustc
+
+          barepkgs.rustracer
+          # (rustracer.overrideAttrs (old: {
+            # dontCheck = true;
+          # }))
         ]) ++ deps;
+
+        RUST_SRC_PATH = "${pkgs.naerskRust}/lib/rustlib/src/rust";
       };
 
       defaultPackage = pkg;
