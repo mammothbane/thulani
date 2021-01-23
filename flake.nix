@@ -45,6 +45,13 @@
         inherit (pkgs) cargo rustc;
       });
 
+      deps = with pkgs; [
+        openssl
+        pkgconfig
+        libopus
+        postgresql
+      ];
+
       pkg = naersk.buildPackage {
         pname = "thulani";
         version = self.rev or "dirty";
@@ -53,16 +60,15 @@
 
         cargoBuildOptions = old: old ++ [ "--offline" ];
 
-        buildInputs = [
-        ];
+        buildInputs = deps;
       };
 
     in {
       devShell = pkgs.mkShell {
-        buildInputs = with pkgs; [
+        buildInputs = (with pkgs; [
           cargo
           rustc
-        ];
+        ]) ++ deps;
       };
 
       defaultPackage = pkg;
