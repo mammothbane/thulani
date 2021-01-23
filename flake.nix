@@ -58,9 +58,8 @@
 
         src = pkgs.lib.cleanSource ./.;
 
-        cargoBuildOptions = old: old ++ [ "--offline" ];
-
         buildInputs = deps;
+        remapPathPrefix = true;
       };
 
     in {

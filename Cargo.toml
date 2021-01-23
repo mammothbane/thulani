@@ -44,3 +44,4 @@ envconfig_derive = "^0.8"
 default-features = false
 features = ["builder", "cache", "client", "framework", "gateway", "http", "model", "utils", "voice", "standard_framework", "rustls_backend"]
 git = "https://github.com/mammothbane/serenity"
+branch = "master"
